@@ -6,64 +6,71 @@
 
 ```
 ouro/
-├── __main__.py              # Entry: OuroApp().run()
-├── app.py (430 lines)       # Textual App, game loop, key bindings, UI sync
 ├── data/                    # Static definitions (no mutable state)
-│   ├── balance.py (191)     # BALANCE singleton — all tuning constants
-│   ├── upgrades.py (280)    # Run upgrade definitions, UpgradeEffect enum
-│   ├── ascension_upgrades.py (112) # Permanent meta upgrade tree (7 upgrades)
+│   ├── balance.py           # BALANCE singleton — all tuning constants
+│   ├── upgrades.py          # Run upgrade definitions, UpgradeEffect enum
+│   ├── ascension_upgrades.py # Permanent meta upgrade tree (7 upgrades)
 │   ├── archetypes.py        # Run archetypes (random at run start)
-│   ├── curses.py (100)      # Run curses (random at run start)
-│   ├── skins.py (95)        # Cosmetic snake skins
-│   └── lore.py (164)        # Lore fragment text
+│   ├── curses.py            # Run curses (random at run start)
+│   ├── skins.py             # Cosmetic snake skins
+│   └── lore.py              # Lore fragment text
 ├── engine/                  # Game logic (no UI imports)
-│   ├── game_state.py (119)  # GameState dataclass, Phase enum, RunStats
-│   ├── economy.py (235)     # compute_derived, handle_press, tick_idle, format_number
-│   ├── rhythm.py (366)      # attempt_bite, tick_mouth, BPM, combo decay, venom rush
-│   ├── prestige.py (152)    # can_shed/perform_shed, can_ascend/perform_ascension
-│   ├── meta.py (161)        # MetaState, apply_ascension_starting_bonuses, save/load meta
-│   ├── events.py (328)      # EventManager: Golden Ouroboros, Frenzy, Bargain, Echo, Challenges
-│   ├── procedural.py (90)   # generate_offerings (weighted random upgrade selection)
-│   └── save.py (178)        # save_run/load_run/delete_run (JSON)
-├── ui/                      # Textual widgets (no engine logic)
-│   ├── hud.py (212)         # Sidebar: Essence, length, combo, growth stage, goals
-│   ├── rhythm_indicator.py (199) # ASCII jaw + beat bar + feedback text
-│   ├── upgrade_panel.py (163)    # Run upgrade shop (3 offerings)
-│   ├── ascension_screen.py (163) # Modal: spend Scales on permanent upgrades
-│   ├── prestige_screen.py   # Shed/Ascend availability panel
-│   ├── snake_display.py (126)    # ASCII ouroboros art (4 sizes)
-│   ├── event_overlay.py     # Golden/Challenge/Bargain/Echo overlay
-│   ├── collections.py (104) # Skins + Lore journal screen
-│   └── styles.tcss          # Textual CSS
-tests/                       # 47 tests
+│   ├── game_state.py        # GameState dataclass, Phase enum, RunStats
+│   ├── economy.py           # compute_derived, handle_press, tick_idle, format_number
+│   ├── rhythm.py            # attempt_bite, tick_mouth, BPM, combo decay, venom rush
+│   ├── prestige.py          # can_shed/perform_shed, can_ascend/perform_ascension
+│   ├── meta.py              # MetaState, apply_ascension_starting_bonuses, save/load meta
+│   ├── events.py            # EventManager: Golden Ouroboros, Frenzy, Bargain, Echo, Challenges
+│   ├── procedural.py        # generate_offerings (weighted random upgrade selection)
+│   └── save.py              # save_run/load_run/delete_run (JSON)
+├── web/                     # Flask dev server + static game assets
+│   ├── server.py            # Flask app — serves index.html + legacy API routes
+│   ├── __main__.py          # Entry: python -m ouro.web
+│   ├── static/
+│   │   ├── engine.js        # Full game engine (JS port) — no server calls
+│   │   ├── game.js          # UI rendering, input handling, game loop
+│   │   ├── style.css        # All styling
+│   │   └── index.html       # Standalone entry point (used by static build)
+│   └── templates/
+│       └── game.html        # Jinja2 template (Flask dev server only)
+scripts/
+│   └── build.sh             # Copies static/ to build/ with content-hash filenames
+build/                       # Generated — deployed to Azure Static Web Apps
+tests/
 ├── test_economy.py          # Economy math
-├── test_rhythm.py (138)     # Bite timing, combo, BPM
-├── test_prestige.py (128)   # Shed stage advance, ascension
-└── test_synergies.py (289)  # Cross-system integration
+├── test_rhythm.py           # Bite timing, combo, BPM
+├── test_prestige.py         # Shed stage advance, ascension
+└── test_synergies.py        # Cross-system integration
 ```
 
 ---
 
-## Core Data Flow
+## Core Data Flow (JS engine — `engine.js`)
 
 ```
-app._game_tick() [30Hz]
-├── tick_idle(state, dt)
-├── tick_mouth(state)             # reopens jaw after cooldown
-├── tick_venom_rush(state)        # expires perfect-streak buff
-├── tick_auto_bite(state)         # Serpent Instinct auto-bites
-├── tick_combo_decay(state)       # resets combo on missed beats
-├── tick_post_frenzy_bpm(state)   # steps BPM down after frenzy
-├── compute_derived(state)        # recalc essence_per_press, idle_income_per_s
+gameTick() [~30Hz, requestAnimationFrame]
+├── tickIdle(state, dt)
+├── tickMouth(state)              # reopens jaw after cooldown
+├── tickVenomRush(state)          # expires perfect-streak buff
+├── tickAutoBite(state)           # Serpent Instinct auto-bites
+├── tickComboDecay(state)         # resets combo on missed beats
+├── tickPostFrenzyBpm(state)      # steps BPM down after frenzy
+├── computeDerived(state)         # recalc essencePerPress, idleIncomePerS
 ├── events.tick(state)            # Golden, Challenge, Bargain, Echo timers
-└── _sync_ui()                    # push state to every widget
+└── render()                      # push state to DOM (game.js)
 
-app.action_feed() [on Space/Enter]
-├── attempt_bite(state)           # returns "perfect"/"good"/"miss"/"saved"/None
-├── compute_derived(state)
-├── handle_press(state)           # earn Essence, chain bites, rattletail
-└── rhythm.set_feedback(result)   # visual jawbar + text feedback
+onBite() [Space / click]
+├── attemptBite(state)            # returns "perfect"/"good"/"miss"/"saved"/None
+├── computeDerived(state)
+├── handlePress(state)            # earn Essence, chain bites, rattletail
+└── showFeedback(result)          # visual jawbar + text feedback
 ```
+
+> The Python `engine/` package is kept for tests and the legacy Flask server.
+> The canonical game engine runs entirely in the browser (`engine.js`).
+> The Flask server (`ouro/web/server.py`) has `/api/*` routes that mirror the
+> Python engine but are not called by the client — they remain as a server-side
+> reference implementation.
 
 ---
 

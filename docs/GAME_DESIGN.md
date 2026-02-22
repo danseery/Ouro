@@ -85,7 +85,7 @@ The ouroboros (snake eating its own tail) isn't just a skin — it **is** the me
 - **Input:** Spacebar/Enter mashing
 - **Rhythm System:** A tempo indicator pulses. Hitting keys in rhythm builds a combo multiplier (1x → 2x → 3x → 5x). Missing the beat resets the combo.
 - **Output:** Each press generates Essence (base amount × combo × upgrades)
-- **Visual:** Snake visually grows in the TUI, segments light up on rhythm hits
+- **Visual:** Snake visually grows on the canvas, segments light up on rhythm hits
 
 ### Layer 1: Growth & Spending
 - **Currency:** Essence (earned from feeding) + Snake Length (visual representation)
@@ -225,18 +225,17 @@ Run End:       Ascension → permanent upgrades purchased → new run with bonus
 ## Technical Architecture
 
 ### Stack
-- **Python 3.12+**
-- **Textual 8.0** — TUI framework (async, CSS-styled, widget-based)
-- **JSON** — save format: `~/.ouro/run.json` (run state) + `~/.ouro/meta.json` (meta)
+- **Python 3.12 / Flask** — dev server only; game logic is fully client-side
+- **JavaScript** — canonical game engine (`engine.js`) + UI (`game.js`)
+- **localStorage** — save format in the browser
+- **Azure Static Web Apps** — production hosting (CDN, auto HTTPS)
 
 ### Module Structure
 See [ARCHITECTURE.md](ARCHITECTURE.md) for full module-by-module reference.
 
 ```
 ouro/
-├── __main__.py          # Entry point
-├── app.py               # Textual App, 30Hz game loop, key bindings
-├── engine/
+├── engine/              # Python engine (used by tests + Flask server reference)
 │   ├── game_state.py    # GameState dataclass, Phase enum (HATCHLING only)
 │   ├── economy.py       # compute_derived, handle_press, tick_idle
 │   ├── rhythm.py        # Bite timing, combo, BPM, venom rush
@@ -245,25 +244,22 @@ ouro/
 │   ├── procedural.py    # Weighted random upgrade offerings
 │   ├── meta.py          # MetaState, ascension bonuses, save/load
 │   └── save.py          # Run state JSON serialization
-├── ui/
-│   ├── snake_display.py # ASCII ouroboros art (4 size tiers)
-│   ├── hud.py           # Sidebar: Essence, length, stage, goals
-│   ├── rhythm_indicator.py  # Jaw bar: expanding→hit→feedback
-│   ├── upgrade_panel.py     # Run upgrade shop (3 offerings)
-│   ├── ascension_screen.py  # Modal: permanent upgrade purchases
-│   ├── prestige_screen.py   # Shed/Ascend availability display
-│   ├── event_overlay.py     # Event popups
-│   ├── collections.py       # Skins + Lore journal
-│   └── styles.tcss      # Textual CSS stylesheet
-├── data/
-│   ├── upgrades.py      # Run upgrade definitions
-│   ├── ascension_upgrades.py # Permanent upgrade tree (7 upgrades)
-│   ├── archetypes.py    # Run archetype modifiers
-│   ├── curses.py        # Run curse modifiers
-│   ├── skins.py         # Cosmetic skin definitions
-│   ├── lore.py          # Lore fragment text
-│   └── balance.py       # BALANCE singleton (all tuning constants)
-└── tests/               # 47 tests
+├── web/
+│   ├── server.py        # Flask dev server (serves index.html)
+│   └── static/
+│       ├── engine.js    # Full game engine port — runs in browser, no server calls
+│       ├── game.js      # UI rendering, input handling, 30Hz loop
+│       ├── style.css    # All styling
+│       └── index.html   # Standalone entry point (used by static build)
+└── data/
+    ├── upgrades.py      # Run upgrade definitions
+    ├── ascension_upgrades.py # Permanent upgrade tree (7 upgrades)
+    ├── archetypes.py    # Run archetype modifiers
+    ├── curses.py        # Run curse modifiers
+    ├── skins.py         # Cosmetic skin definitions
+    ├── lore.py          # Lore fragment text
+    └── balance.py       # BALANCE singleton (all tuning constants)
+tests/
     ├── test_economy.py
     ├── test_rhythm.py
     ├── test_prestige.py

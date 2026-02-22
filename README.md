@@ -1,6 +1,6 @@
 # Ouro — The Eternal Serpent
 
-Roguelike incremental TUI game. Python 3.12 + Textual 8.0.
+Roguelike incremental web game. Python 3.12 + Flask (dev server), fully client-side JS engine.
 
 ```
 Feed → Grow → Shed → Ascend → Repeat
@@ -11,23 +11,21 @@ Feed → Grow → Shed → Ascend → Repeat
 ```bash
 cd /home/bloc/projects/ouro
 source .venv/bin/activate
-python -m ouro              # run the game
-pytest tests/ -q            # 47 tests
+python -m ouro.web          # dev server at http://127.0.0.1:5000
+pytest tests/ -q            # run tests
 ```
 
 ## Controls
 
 | Key | Action |
 |-----|--------|
-| Space / Enter | Feed (bite) — rhythmic timing matters |
+| Space / Click | Bite — rhythmic timing matters |
 | S | Shed Skin (advance growth stage) |
 | A | Ascend (meta-reset, opens upgrade tree) |
 | G | Catch Golden Ouroboros |
 | B | Accept Serpent's Bargain |
 | E | Accept Ancient Echo |
-| 1-3 | Buy offered upgrades |
-| C | Collections screen |
-| Q | Quit |
+| 1-6 | Buy offered upgrades |
 
 ## Game Loop Summary
 
@@ -54,11 +52,11 @@ See [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) for design philosophy.
 
 ## Tech
 
-- **Python 3.12.3**, **Textual 8.0.0** TUI framework
-- 30 Hz game loop (`app.py` → `_game_tick()`)
-- Save: `~/.ouro/run.json` (run state) + `~/.ouro/meta.json` (persistent meta)
-- ~4900 lines across 35 source files
-- 47 tests (pytest)
+- **Python 3.12 / Flask** — dev server only (`ouro/web/server.py`)
+- **Fully client-side JS engine** — `engine.js` + `game.js` (no server calls during play)
+- Save: `localStorage` in the browser
+- Static build: `bash scripts/build.sh` → `build/` (deployed to Azure Static Web Apps)
+- Tests: pytest (engine logic only)
 ## Development Workflow
 
 > ⚠️ **CRITICAL — never commit directly to `main`.**
