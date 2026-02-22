@@ -59,3 +59,27 @@ See [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) for design philosophy.
 - Save: `~/.ouro/run.json` (run state) + `~/.ouro/meta.json` (persistent meta)
 - ~4900 lines across 35 source files
 - 47 tests (pytest)
+## Development Workflow
+
+> ⚠️ **CRITICAL — never commit directly to `main`.**
+> All changes must go through a feature branch and be reviewed before merging.
+
+```bash
+# 1. Create a branch for every change
+git checkout -b feat/your-feature-name
+
+# 2. Make changes, commit on the branch
+git add <files>
+git commit -m "feat: describe the change"
+
+# 3. Push the branch (does NOT deploy to production)
+git push -u origin feat/your-feature-name
+
+# 4. Review the changes locally, then merge to main when satisfied
+git checkout main
+git merge --no-ff feat/your-feature-name
+git push   # ← this triggers the Azure deployment
+```
+
+**Branch naming**: `feat/`, `fix/`, `style/`, `ci/` prefixes.  
+**`main` = production.** Every push to `main` deploys to https://witty-grass-033444c10.6.azurestaticapps.net instantly.
