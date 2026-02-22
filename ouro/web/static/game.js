@@ -101,6 +101,7 @@ const NUM_FRAMES = TOP_JAW.length;
 // ---------------------------------------------------------------------------
 
 const $ = (sel) => document.querySelector(sel);
+const isMobile = () => window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 700;
 const dom = {
   essence:  $('#hud-essence'),
   perPress: $('#hud-per-press'),
@@ -700,7 +701,7 @@ function renderEvents() {
     dom.eventOverlay.className     = 'golden';
     dom.eventText.textContent      = '✦ GOLDEN OUROBOROS! ✦';
     dom.eventTimer.textContent     = `${remaining.toFixed(1)}s`;
-    dom.eventActionBtn.textContent = '[G] Catch!';
+    dom.eventActionBtn.textContent = isMobile() ? 'Catch!' : '[G] Catch!';
     dom.eventActionBtn.className   = '';
     dom.eventActionBtn.onclick     = catchGolden;
   } else if (s.challenge_active) {
@@ -727,7 +728,7 @@ function renderEvents() {
     dom.eventOverlay.className     = 'bargain';
     dom.eventText.textContent      = "🐍 Serpent's Bargain — Sacrifice 30% essence for a free upgrade";
     dom.eventTimer.textContent     = '';
-    dom.eventActionBtn.textContent = '[B] Accept';
+    dom.eventActionBtn.textContent = isMobile() ? 'Accept' : '[B] Accept';
     dom.eventActionBtn.className   = '';
     dom.eventActionBtn.onclick     = acceptBargain;
   } else if (ev && ev.echo_active) {
@@ -736,7 +737,7 @@ function renderEvents() {
     dom.eventOverlay.className     = 'echo';
     dom.eventText.textContent      = `✦ Ancient Echo — Free upgrade: ${name}`;
     dom.eventTimer.textContent     = '';
-    dom.eventActionBtn.textContent = '[E] Claim';
+    dom.eventActionBtn.textContent = isMobile() ? 'Claim' : '[E] Claim';
     dom.eventActionBtn.className   = '';
     dom.eventActionBtn.onclick     = acceptEcho;
   } else if (s.archetype_offer_id) {
@@ -745,7 +746,7 @@ function renderEvents() {
     dom.eventOverlay.className     = 'archetype';
     dom.eventText.textContent      = `⚔ ${offeredArch.name} awakens — ${offeredArch.tagline}`;
     dom.eventTimer.textContent     = `${remaining.toFixed(1)}s`;
-    dom.eventActionBtn.textContent = '[T] Transform';
+    dom.eventActionBtn.textContent = isMobile() ? 'Transform' : '[T] Transform';
     dom.eventActionBtn.className   = '';
     dom.eventActionBtn.onclick     = acceptArchetypeOffer;
   } else {

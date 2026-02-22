@@ -1371,6 +1371,7 @@ kbd {
     #game-container {
         grid-template-columns: 1fr;
         grid-template-rows: auto;
+        padding-top: var(--spacing);
     }
     #hud-panel {
         flex-direction: row;
@@ -1382,4 +1383,62 @@ kbd {
     .divider { display: none; }
     .keybinds { justify-content: center; }
     #upgrade-panel { max-height: none; }
+}
+
+/* ── Mobile / Touch ───────────────────────────────────────────── */
+@media (max-width: 600px) {
+    /* Header — compact so all buttons fit */
+    #game-header {
+        padding: 6px 10px;
+        gap: 6px;
+    }
+    .logo-icon { font-size: 1.3rem; }
+    .header-title h1 {
+        font-size: 1.1rem;
+        letter-spacing: 2px;
+    }
+    .subtitle { display: none; }
+    .badge {
+        font-size: 0.6rem;
+        padding: 2px 6px;
+        letter-spacing: 0;
+    }
+    .header-btn {
+        padding: 5px 7px;
+        font-size: 0.9rem;
+    }
+    .header-right { gap: 4px; }
+
+    /* Keybinds — keyboard shortcuts irrelevant on touch */
+    .keybinds { display: none; }
+
+    /* Action buttons — hide key-hint labels */
+    .btn-key { display: none; }
+
+    /* Bite button — large tap target */
+    .bite-btn {
+        padding: 20px 32px;
+        width: 100%;
+    }
+    .bite-icon { font-size: 2rem; }
+    .bite-label { font-size: 1.2rem; }
+    .bite-sub { display: none; }
+
+    /* Action buttons — bigger tap targets */
+    .action-btn {
+        padding: 12px 16px;
+        font-size: 0.85rem;
+        justify-content: center;
+    }
+
+    /* Event overlay action button — easy to tap */
+    #event-action-btn {
+        padding: 10px 24px;
+        font-size: 0.9rem;
+    }
+
+    /* Upgrade cards — ensure full-width on small screens */
+    .upgrade-card {
+        padding: 10px 12px;
+    }
 }
