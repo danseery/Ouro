@@ -28,5 +28,8 @@ sed \
   -e "s|src=\"game.js\"|src=\"game.${hash_game}.js\"|g" \
   "$SRC/index.html" > "$DEST/index.html"
 
+# Azure SWA routing config must live in app_location
+cp staticwebapp.config.json "$DEST/staticwebapp.config.json"
+
 echo "Build complete → $DEST/"
 ls -lh "$DEST"
