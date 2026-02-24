@@ -48,15 +48,15 @@ const BALANCE = {
     scale_multiplier_per: 0.1,
     growth_stages: [
       [0,        'Hatchling'],
-      [100,      'Snakelet'],
-      [250,      'Local Predator'],
-      [1000,     'Regional Devourer'],
-      [20000,     'National Constrictor'],
-      [400000,    'Continental Coil'],
-      [8000000,    'Global Serpent'],
-      [160000000,   'Stellar Devourer'],
-      [3200000000,   'Galactic Ouroboros'],
-      [1000000000000,  'Cosmic Scale'],
+      [500,      'Snakelet'],
+      [2000,     'Local Predator'],
+      [10000,    'Regional Devourer'],
+      [100000,   'National Constrictor'],
+      [2000000,  'Continental Coil'],
+      [40000000, 'Global Serpent'],
+      [800000000, 'Stellar Devourer'],
+      [16000000000, 'Galactic Ouroboros'],
+      [500000000000, 'Cosmic Scale'],
     ],
   },
   events: {
@@ -103,21 +103,21 @@ const UE = {  // UpgradeEffect enum
 };
 
 const ALL_UPGRADES = {
-  fang_sharpening:   { id:'fang_sharpening',   name:'Fang Sharpening',    description:'Each press tears deeper. +50% Essence per press per level.',                                          effect:UE.ESSENCE_PER_PRESS,    value_per_level:0.5,   base_cost:25,   max_level:100, tier:0, cosmic_only:false },
-  elastic_scales:    { id:'elastic_scales',     name:'Elastic Scales',     description:'Combo lingers longer. +30% combo decay time per level.',                                              effect:UE.COMBO_DECAY_SLOW,     value_per_level:0.3,   base_cost:50,   max_level:100, tier:0, cosmic_only:false },
-  digestive_enzymes: { id:'digestive_enzymes',  name:'Digestive Enzymes',  description:'Digest even while resting. +50% idle income per level.',                                             effect:UE.IDLE_INCOME_MULT,     value_per_level:0.5,   base_cost:100,  max_level:100, tier:0, cosmic_only:false },
-  rattletail:        { id:'rattletail',          name:'Rattletail',         description:'A lucky rattle. +8% chance of double Essence per press per level.',                                 effect:UE.DOUBLE_PRESS_CHANCE,  value_per_level:0.08,  base_cost:75,   max_level:10,  tier:0, cosmic_only:false },
-  hypnotic_eyes:     { id:'hypnotic_eyes',       name:'Hypnotic Eyes',      description:'Golden events linger in your gaze. +25% duration per level.',                                       effect:UE.GOLDEN_DURATION_MULT, value_per_level:0.25,  base_cost:150,  max_level:20,  tier:0, cosmic_only:false },
-  venomous_bite:     { id:'venomous_bite',       name:'Venomous Bite',      description:'Upgrades dissolve easier. -5% upgrade costs per level.',                                            effect:UE.UPGRADE_COST_DISCOUNT,value_per_level:0.05,  base_cost:250,  max_level:11,  tier:0, cosmic_only:false },
-  growth_hormone:    { id:'growth_hormone',      name:'Growth Hormone',     description:'Break through combo ceilings. +1 max combo tier per level.',                                        effect:UE.MAX_COMBO_MULT_BONUS, value_per_level:1.0,   base_cost:200,  max_level:30,  tier:0, cosmic_only:false },
-  resilient_fangs:   { id:'resilient_fangs',     name:'Resilient Fangs',    description:"The ouroboros refuses to let go. +15% chance a Chomp doesn't break your combo per level.",         effect:UE.COMBO_SAVE_CHANCE,    value_per_level:0.15,  base_cost:150,  max_level:6,   tier:0, cosmic_only:false },
-  cascading_fangs:   { id:'cascading_fangs',     name:'Cascading Fangs',    description:'One strike births another. Each bite has a cascading chance to strike again — up to 4 times.',    effect:UE.MULTI_BITE_CHANCE,    value_per_level:0.06,  base_cost:300,  max_level:10,  tier:0, cosmic_only:false },
-  ancient_wisdom:    { id:'ancient_wisdom',      name:'Ancient Wisdom',     description:'Deeper sheds. +1 bonus Scale per shed per level.',                                                  effect:UE.SHED_SCALE_BONUS,     value_per_level:1.0,   base_cost:150,  max_level:50,  tier:1, cosmic_only:false },
-  ouroboros_rhythm:  { id:'ouroboros_rhythm',    name:'Ouroboros Rhythm',   description:'+30% Essence per press, stacks with Fang Sharpening.',                                             effect:UE.ESSENCE_PER_PRESS,    value_per_level:0.3,   base_cost:200,  max_level:75,  tier:1, cosmic_only:false },
-  serpent_instinct:  { id:'serpent_instinct',    name:'Serpent Instinct',   description:'The snake bites by reflex. +10% chance of an automatic perfect bite each beat per level.',         effect:UE.AUTO_BITE_CHANCE,     value_per_level:0.10,  base_cost:250,  max_level:10,  tier:1, cosmic_only:false },
-  stellar_coils:     { id:'stellar_coils',       name:'Stellar Coils',      description:'Stars orbit your coils. +100% cosmic income per level.',                                            effect:UE.COSMIC_INCOME_MULT,   value_per_level:1.0,   base_cost:1200, max_level:100, tier:2, cosmic_only:true  },
-  nebula_nests:      { id:'nebula_nests',        name:'Nebula Nests',       description:'Idle galaxies feed you. +100% idle income per level (cosmic).',                                     effect:UE.IDLE_INCOME_MULT,     value_per_level:1.0,   base_cost:2000, max_level:100, tier:2, cosmic_only:true  },
-  void_shrines:      { id:'void_shrines',        name:'Void Shrines',       description:'+50% Essence per press (cosmic).',                                                                  effect:UE.ESSENCE_PER_PRESS,    value_per_level:0.5,   base_cost:2500, max_level:100, tier:2, cosmic_only:true  },
+  fang_sharpening:   { id:'fang_sharpening',   name:'Fang Sharpening',    description:'Each press tears deeper. +15% Essence per press per level.',                                          effect:UE.ESSENCE_PER_PRESS,    value_per_level:0.15,   base_cost:100,   max_level:100, tier:0, cosmic_only:false },
+  elastic_scales:    { id:'elastic_scales',     name:'Elastic Scales',     description:'Combo lingers longer. +10% combo decay time per level.',                                              effect:UE.COMBO_DECAY_SLOW,     value_per_level:0.10,   base_cost:200,   max_level:100, tier:0, cosmic_only:false },
+  digestive_enzymes: { id:'digestive_enzymes',  name:'Digestive Enzymes',  description:'Digest even while resting. +15% idle income per level.',                                             effect:UE.IDLE_INCOME_MULT,     value_per_level:0.15,   base_cost:250,  max_level:100, tier:0, cosmic_only:false },
+  rattletail:        { id:'rattletail',          name:'Rattletail',         description:'A lucky rattle. +3% chance of double Essence per press per level.',                                 effect:UE.DOUBLE_PRESS_CHANCE,  value_per_level:0.03,  base_cost:300,   max_level:10,  tier:0, cosmic_only:false },
+  hypnotic_eyes:     { id:'hypnotic_eyes',       name:'Hypnotic Eyes',      description:'Golden events linger in your gaze. +10% duration per level.',                                       effect:UE.GOLDEN_DURATION_MULT, value_per_level:0.10,  base_cost:400,  max_level:20,  tier:0, cosmic_only:false },
+  venomous_bite:     { id:'venomous_bite',       name:'Venomous Bite',      description:'Upgrades dissolve easier. -2% upgrade costs per level.',                                            effect:UE.UPGRADE_COST_DISCOUNT,value_per_level:0.02,  base_cost:500,  max_level:11,  tier:0, cosmic_only:false },
+  growth_hormone:    { id:'growth_hormone',      name:'Growth Hormone',     description:'Break through combo ceilings. +0.2 max combo tier per level.',                                        effect:UE.MAX_COMBO_MULT_BONUS, value_per_level:0.2,   base_cost:800,  max_level:30,  tier:0, cosmic_only:false },
+  resilient_fangs:   { id:'resilient_fangs',     name:'Resilient Fangs',    description:"The ouroboros refuses to let go. +5% chance a Chomp doesn't break your combo per level.",         effect:UE.COMBO_SAVE_CHANCE,    value_per_level:0.05,  base_cost:400,  max_level:6,   tier:0, cosmic_only:false },
+  cascading_fangs:   { id:'cascading_fangs',     name:'Cascading Fangs',    description:'One strike births another. Each bite has a cascading chance to strike again — up to 4 times.',    effect:UE.MULTI_BITE_CHANCE,    value_per_level:0.02,  base_cost:600,  max_level:10,  tier:0, cosmic_only:false },
+  ancient_wisdom:    { id:'ancient_wisdom',      name:'Ancient Wisdom',     description:'Deeper sheds. +0.2 bonus Scale per shed per level.',                                                  effect:UE.SHED_SCALE_BONUS,     value_per_level:0.2,   base_cost:600,  max_level:50,  tier:1, cosmic_only:false },
+  ouroboros_rhythm:  { id:'ouroboros_rhythm',    name:'Ouroboros Rhythm',   description:'+10% Essence per press, stacks with Fang Sharpening.',                                             effect:UE.ESSENCE_PER_PRESS,    value_per_level:0.10,   base_cost:800,  max_level:75,  tier:1, cosmic_only:false },
+  serpent_instinct:  { id:'serpent_instinct',    name:'Serpent Instinct',   description:'The snake bites by reflex. +2% chance of an automatic perfect bite each beat per level.',         effect:UE.AUTO_BITE_CHANCE,     value_per_level:0.02,  base_cost:1000,  max_level:10,  tier:1, cosmic_only:false },
+  stellar_coils:     { id:'stellar_coils',       name:'Stellar Coils',      description:'Stars orbit your coils. +20% cosmic income per level.',                                            effect:UE.COSMIC_INCOME_MULT,   value_per_level:0.2,   base_cost:5000, max_level:100, tier:2, cosmic_only:true  },
+  nebula_nests:      { id:'nebula_nests',        name:'Nebula Nests',       description:'Idle galaxies feed you. +20% idle income per level (cosmic).',                                     effect:UE.IDLE_INCOME_MULT,     value_per_level:0.2,   base_cost:8000, max_level:100, tier:2, cosmic_only:true  },
+  void_shrines:      { id:'void_shrines',        name:'Void Shrines',       description:'+10% Essence per press (cosmic).',                                                                  effect:UE.ESSENCE_PER_PRESS,    value_per_level:0.10,   base_cost:10000, max_level:100, tier:2, cosmic_only:true  },
 };
 
 const BASE_POOL   = Object.values(ALL_UPGRADES).filter(u => u.tier === 0).map(u => u.id);
@@ -278,13 +278,13 @@ const AE = {  // AscensionEffect enum
 };
 
 const ASCENSION_UPGRADES = {
-  serpent_memory: { id:'serpent_memory', name:'Serpent Memory',  description:'+50 starting Essence per level',       effect:AE.STARTING_ESSENCE, value_per_level:50.0, base_cost:50_000,  cost_growth:2.0, max_level:10 },
-  ancient_coil:   { id:'ancient_coil',   name:'Ancient Coil',    description:'+10 starting Length per level',        effect:AE.STARTING_LENGTH,  value_per_level:10.0, base_cost:100_000, cost_growth:2.5, max_level:5  },
-  endless_drift:  { id:'endless_drift',  name:'Endless Drift',   description:'Idle income × (1 + 10% per level)',    effect:AE.IDLE_BONUS,       value_per_level:0.10, base_cost:200_000, cost_growth:2.5, max_level:5  },
-  serpent_hoard:  { id:'serpent_hoard',  name:"Serpent's Hoard", description:'+1 upgrade offering slot per level',   effect:AE.EXTRA_OFFERING,   value_per_level:1.0,  base_cost:500_000, cost_growth:3.0, max_level:3  },
-  void_fang:      { id:'void_fang',      name:'Void Fang',       description:'Global EPP × (1 + 50% per level)',     effect:AE.EPP_MULT,         value_per_level:0.50, base_cost:400_000, cost_growth:2.5, max_level:5  },
-  scale_harvest:  { id:'scale_harvest',  name:'Scale Harvest',   description:'Scales per shed × (1 + 25% per level)',effect:AE.SHED_SCALES_MULT, value_per_level:0.25, base_cost:250_000, cost_growth:2.5, max_level:5  },
-  cosmic_tempo:   { id:'cosmic_tempo',   name:'Cosmic Tempo',    description:'+10 max BPM cap per level',            effect:AE.MAX_BPM_BONUS,    value_per_level:10.0, base_cost:300_000, cost_growth:2.5, max_level:5  },
+  serpent_memory: { id:'serpent_memory', name:'Serpent Memory',  description:'+10 starting Essence per level',       effect:AE.STARTING_ESSENCE, value_per_level:10.0, base_cost:200_000,  cost_growth:3.0, max_level:10 },
+  ancient_coil:   { id:'ancient_coil',   name:'Ancient Coil',    description:'+2 starting Length per level',        effect:AE.STARTING_LENGTH,  value_per_level:2.0, base_cost:500_000, cost_growth:3.5, max_level:5  },
+  endless_drift:  { id:'endless_drift',  name:'Endless Drift',   description:'Idle income × (1 + 2% per level)',    effect:AE.IDLE_BONUS,       value_per_level:0.02, base_cost:400_000, cost_growth:3.5, max_level:5  },
+  serpent_hoard:  { id:'serpent_hoard',  name:"Serpent's Hoard", description:'+1 upgrade offering slot per level',   effect:AE.EXTRA_OFFERING,   value_per_level:1.0,  base_cost:1_000_000, cost_growth:4.0, max_level:3  },
+  void_fang:      { id:'void_fang',      name:'Void Fang',       description:'Global EPP × (1 + 10% per level)',     effect:AE.EPP_MULT,         value_per_level:0.10, base_cost:1_000_000, cost_growth:3.5, max_level:5  },
+  scale_harvest:  { id:'scale_harvest',  name:'Scale Harvest',   description:'Scales per shed × (1 + 5% per level)',effect:AE.SHED_SCALES_MULT, value_per_level:0.05, base_cost:800_000, cost_growth:3.5, max_level:5  },
+  cosmic_tempo:   { id:'cosmic_tempo',   name:'Cosmic Tempo',    description:'+2 max BPM cap per level',            effect:AE.MAX_BPM_BONUS,    value_per_level:2.0, base_cost:1_000_000, cost_growth:3.5, max_level:5  },
 };
 
 function ascCostAtLevel(udef, currentLevel) {
