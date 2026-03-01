@@ -386,184 +386,38 @@ function renderHUD() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STAGE_ICONS = ['🥚','🐍','🦎','🗺️','🏛️','🌍','🌎','⭐','🌌','🔮'];
+// Preload stage icon images (PNG, tinted at render time)
+const _stageImgs = Array.from({length: 10}, (_, i) => {
+  const img = new Image();
+  img.src = `icons/stage_${i}.png`;
+  return img;
+});
 
-function _stageColor(stageIdx, isFrenzy) {
-
-  switch (stageIdx) {
-
-    case 0: { // Cracked egg
-      ctx.beginPath();
-      ctx.ellipse(cx, cy + r * 0.08, r * 0.55, r * 0.70, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - r * 0.62);
-      ctx.lineTo(cx - r * 0.13, cy - r * 0.22);
-      ctx.lineTo(cx + r * 0.11, cy + r * 0.04);
-      ctx.lineTo(cx, cy + r * 0.28);
-      ctx.stroke();
-      break;
-    }
-
-    case 1: { // Tangle of baby snakes — three S-curves
-      const curves = [
-        [[-r*.42,-r*.48],[r*.38,-r*.25],[-r*.38,r*.12],[r*.22,r*.48]],
-        [[-r*.10,-r*.52],[r*.42,-r*.10],[-r*.28,r*.28],[r*.08,r*.54]],
-        [[-r*.55,-r*.08],[r*.12,-r*.44],[-r*.10,r*.46],[r*.52,r*.06]],
-      ];
-      for (const [[x0,y0],[c0x,c0y],[c1x,c1y],[x1,y1]] of curves) {
-        ctx.beginPath();
-        ctx.moveTo(cx+x0, cy+y0);
-        ctx.bezierCurveTo(cx+c0x,cy+c0y, cx+c1x,cy+c1y, cx+x1,cy+y1);
-        ctx.stroke();
-      }
-      break;
-    }
-
-    case 2: { // Small mouse
-      // body
-      ctx.beginPath();
-      ctx.ellipse(cx, cy + r * 0.12, r * 0.50, r * 0.40, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      // ears
-      ctx.beginPath(); ctx.arc(cx - r*0.34, cy - r*0.32, r*0.20, 0, Math.PI*2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(cx + r*0.34, cy - r*0.32, r*0.20, 0, Math.PI*2); ctx.stroke();
-      // tail
-      ctx.beginPath();
-      ctx.moveTo(cx + r*0.48, cy + r*0.18);
-      ctx.bezierCurveTo(cx+r*.85, cy+r*.10, cx+r*.88, cy+r*.72, cx+r*.58, cy+r*.78);
-      ctx.stroke();
-      // eye
-      ctx.beginPath(); ctx.arc(cx + r*0.12, cy + r*0.04, r*0.07, 0, Math.PI*2); ctx.fill();
-      break;
-    }
-
-    case 3: { // Buffalo
-      // body hump
-      ctx.beginPath();
-      ctx.ellipse(cx - r*0.08, cy + r*0.18, r*0.58, r*0.42, -0.12, 0, Math.PI*2);
-      ctx.stroke();
-      // head
-      ctx.beginPath();
-      ctx.ellipse(cx + r*0.44, cy + r*0.28, r*0.26, r*0.20, 0.25, 0, Math.PI*2);
-      ctx.stroke();
-      // left horn
-      ctx.beginPath();
-      ctx.moveTo(cx - r*0.12, cy - r*0.22);
-      ctx.bezierCurveTo(cx-r*.42, cy-r*.60, cx-r*.68, cy-r*.38, cx-r*.52, cy-r*.12);
-      ctx.stroke();
-      // right horn
-      ctx.beginPath();
-      ctx.moveTo(cx + r*0.18, cy - r*0.18);
-      ctx.bezierCurveTo(cx+r*.46, cy-r*.56, cx+r*.70, cy-r*.32, cx+r*.54, cy-r*.08);
-      ctx.stroke();
-      break;
-    }
-
-    case 4: { // Pillar crushed by coil
-      const ph = r * 1.30, pw = r * 0.18;
-      ctx.strokeRect(cx - pw, cy - ph*0.5, pw*2, ph);
-      // three coil ellipses
-      for (let i = 0; i < 3; i++) {
-        const y = cy - ph*0.28 + i * ph*0.28;
-        ctx.beginPath();
-        ctx.ellipse(cx, y, r*0.58, r*0.16, 0, 0, Math.PI*2);
-        ctx.stroke();
-      }
-      break;
-    }
-
-    case 5: { // Continent encircled
-      // landmass blob
-      ctx.beginPath();
-      ctx.moveTo(cx - r*0.08, cy - r*0.48);
-      ctx.bezierCurveTo(cx+r*.44,cy-r*.58, cx+r*.54,cy-r*.08, cx+r*.28,cy+r*.30);
-      ctx.bezierCurveTo(cx+r*.08,cy+r*.58, cx-r*.40,cy+r*.48, cx-r*.54,cy+r*.08);
-      ctx.bezierCurveTo(cx-r*.62,cy-r*.22, cx-r*.44,cy-r*.38, cx-r*.08,cy-r*.48);
-      ctx.stroke();
-      // encircling arc with arrow
-      ctx.beginPath();
-      ctx.arc(cx, cy, r*0.84, -Math.PI*0.62, Math.PI*0.42, false);
-      ctx.stroke();
-      // arrowhead at arc start
-      const aStart = -Math.PI*0.62;
-      const ax = cx + r*0.84*Math.cos(aStart), ay = cy + r*0.84*Math.sin(aStart);
-      ctx.beginPath();
-      ctx.moveTo(ax, ay);
-      ctx.lineTo(ax - r*0.14, ay - r*0.06);
-      ctx.moveTo(ax, ay);
-      ctx.lineTo(ax - r*0.06, ay + r*0.14);
-      ctx.stroke();
-      break;
-    }
-
-    case 6: { // Globe with coils
-      ctx.beginPath(); ctx.arc(cx, cy, r*0.60, 0, Math.PI*2); ctx.stroke();
-      // equator
-      ctx.beginPath(); ctx.ellipse(cx, cy, r*0.60, r*0.18, 0, 0, Math.PI*2); ctx.stroke();
-      // coil arcs above and below
-      ctx.beginPath(); ctx.arc(cx, cy - r*0.08, r*0.80, Math.PI*0.18, Math.PI*0.82, false); ctx.stroke();
-      ctx.beginPath(); ctx.arc(cx, cy + r*0.10, r*0.80, -Math.PI*0.82, -Math.PI*0.18, false); ctx.stroke();
-      break;
-    }
-
-    case 7: { // Imploding star
-      const spikes = 5, oR = r*0.68, iR = r*0.27;
-      ctx.beginPath();
-      for (let i = 0; i < spikes*2; i++) {
-        const a = (i * Math.PI / spikes) - Math.PI/2;
-        const rad = i%2 === 0 ? oR : iR;
-        i === 0 ? ctx.moveTo(cx+rad*Math.cos(a), cy+rad*Math.sin(a))
-                : ctx.lineTo(cx+rad*Math.cos(a), cy+rad*Math.sin(a));
-      }
-      ctx.closePath(); ctx.stroke();
-      // consumed centre
-      ctx.beginPath(); ctx.arc(cx, cy, r*0.18, 0, Math.PI*2); ctx.fill();
-      break;
-    }
-
-    case 8: { // Black hole + accretion disk
-      // event horizon
-      ctx.beginPath(); ctx.arc(cx, cy, r*0.26, 0, Math.PI*2); ctx.fill();
-      // accretion disk
-      ctx.beginPath(); ctx.ellipse(cx, cy, r*0.72, r*0.20, 0.28, 0, Math.PI*2); ctx.stroke();
-      // outer halo
-      ctx.save(); ctx.globalAlpha = 0.38;
-      ctx.beginPath(); ctx.ellipse(cx, cy, r*0.88, r*0.30, 0.28, 0, Math.PI*2); ctx.stroke();
-      ctx.restore();
-      // lensing arc
-      ctx.beginPath(); ctx.arc(cx, cy - r*0.04, r*0.52, Math.PI*1.12, Math.PI*1.88, false); ctx.stroke();
-      break;
-    }
-
-    case 9: { // Eye of the cosmos
-      // almond outline
-      ctx.beginPath();
-      ctx.moveTo(cx - r*0.74, cy);
-      ctx.bezierCurveTo(cx-r*.28,cy-r*.54, cx+r*.28,cy-r*.54, cx+r*.74,cy);
-      ctx.bezierCurveTo(cx+r*.28,cy+r*.54, cx-r*.28,cy+r*.54, cx-r*.74,cy);
-      ctx.closePath(); ctx.stroke();
-      // iris
-      ctx.beginPath(); ctx.arc(cx, cy, r*0.34, 0, Math.PI*2); ctx.stroke();
-      // pupil
-      ctx.beginPath(); ctx.arc(cx, cy, r*0.13, 0, Math.PI*2); ctx.fill();
-      // star rays between iris and pupil
-      for (let i = 0; i < 6; i++) {
-        const a = (i * Math.PI) / 3;
-        ctx.beginPath();
-        ctx.moveTo(cx + r*0.15*Math.cos(a), cy + r*0.15*Math.sin(a));
-        ctx.lineTo(cx + r*0.31*Math.cos(a), cy + r*0.31*Math.sin(a));
-        ctx.stroke();
-      }
-      break;
-    }
-
-    default: { // fallback: simple arc
-      ctx.beginPath(); ctx.arc(cx, cy, r*0.58, 0, Math.PI*1.8); ctx.stroke();
-      break;
-    }
+function _drawStageIcon(ctx, stageIdx, cx, cy, size, col) {
+  const img = _stageImgs[stageIdx];
+  if (img && img.complete && img.naturalWidth) {
+    // Draw PNG onto offscreen canvas, then tint via source-in composite
+    const off = document.createElement('canvas');
+    off.width = off.height = size;
+    const octx = off.getContext('2d');
+    octx.drawImage(img, 0, 0, size, size);
+    octx.globalCompositeOperation = 'source-in';
+    octx.fillStyle = col;
+    octx.fillRect(0, 0, size, size);
+    ctx.globalAlpha = 0.85;
+    ctx.drawImage(off, cx - size / 2, cy - size / 2);
+    ctx.globalAlpha = 1.0;
+  } else {
+    // Fallback to emoji while image loads
+    ctx.font = `${size}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.globalAlpha = 0.85;
+    ctx.fillText(STAGE_ICONS[stageIdx] || '🐍', cx, cy);
+    ctx.globalAlpha = 1.0;
   }
-  ctx.restore();
 }
+
 
 function _stageColor(stageIdx, isFrenzy) {
   if (isFrenzy)          return [255, 160,   0];
@@ -692,10 +546,9 @@ function _drawShedAnim(ctx, W, H, cx, cy, ringR, t) {
     // Center icon (next stage)
     const iconSize = Math.round(ringR * 0.60);
     ctx.shadowBlur    = 0;
-    ctx.font          = `${iconSize}px serif`;
     ctx.textAlign     = 'center';
     ctx.textBaseline  = 'middle';
-    ctx.fillText(STAGE_ICONS[nextIdx] || '🐍', cx, cy);
+    _drawStageIcon(ctx, nextIdx, cx, cy, iconSize, nCol);
 
     ctx.restore();
   }
@@ -870,12 +723,9 @@ function renderSnake() {
 
   // ── Center stage icon ─────────────────────────────────────────────────────
   const iconSize = Math.round(ringR * 0.62);
-  ctx.font          = `${iconSize}px serif`;
   ctx.textAlign     = 'center';
   ctx.textBaseline  = 'middle';
-  ctx.globalAlpha   = 0.85;
-  ctx.fillText(STAGE_ICONS[stageIdx] || '🐍', cx, cy);
-  ctx.globalAlpha   = 1.0;
+  _drawStageIcon(ctx, stageIdx, cx, cy, iconSize, col);
 
   // ── Length label & shed bar ───────────────────────────────────────────────
   dom.snakeLength.textContent = s.snake_length;
