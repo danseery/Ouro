@@ -14,7 +14,7 @@ from flask import Flask, send_from_directory
 
 _STATIC = Path(__file__).parent / "static"
 
-app = Flask(__name__, static_folder=str(_STATIC))
+app = Flask(__name__, static_folder=str(_STATIC), static_url_path="")
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 
 

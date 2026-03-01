@@ -13,11 +13,13 @@
 let state  = null;   // GameState (from engine.js)
 let meta   = null;   // MetaState
 let events = null;   // EventManager
+let _saveEpoch = null; // Guards against stale-tab save clobbering
 
 let lastBiteResult    = null;
 let feedbackTimer     = null;
 let feedbackFadeTimer = null;
 const FEEDBACK_DURATION = 500;  // ms
+let _lastIdleMissVisualBeat = -1;
 
 // Ascension modal pending purchases before confirmation
 let ascensionPurchases = {};
@@ -52,7 +54,7 @@ let _beatCache = { t: 0, bpm: 60, beatInterval: 1, prog: 0, displayProg: 0.5, di
 
 // Tap BPM is latched once per beat (when the cursor completes a pass) so it
 // stays readable rather than updating every rAF frame.
-let _tapBpmLocked = '— tap';
+let _tapBpmLocked = '— rate';
 let _lastBeatIndexForTap = -1;
 
 function _sampleBeat() {
@@ -114,10 +116,12 @@ const dom = {
   goalText: $('#hud-goal-text'),
   goalBar:  $('#hud-goal-bar'),
   goalPct:  $('#hud-goal-pct'),
-  archetype:      $('#hud-archetype'),
   curse:          $('#hud-curse'),
+  rhythmHint:     $('#rhythm-hint'),
   snakeArt:       $('#snake-art'),
   snakeLength:    $('#snake-length-label'),
+  shedBarFill:    $('#shed-bar-fill'),
+  shedBarLabel:   $('#shed-bar-label'),
   jawTop:         $('#jaw-top'),
   jawBot:         $('#jaw-bottom'),
   jawHint:        $('#jaw-hint'),
@@ -128,7 +132,8 @@ const dom = {
   rhythmBpm:      $('#rhythm-bpm'),
   rhythmTapBpm:   $('#rhythm-tap-bpm'),
   rhythmCombo:    $('#rhythm-combo'),
-  rhythmHits:     $('#rhythm-hits'),
+  rhythmComboCount: $('#rhythm-combo-count'),
+  rhythmPerfectStreak: $('#rhythm-perfect-streak'),
   biteBtn:        $('#bite-button'),
   shedBtn:        $('#btn-shed'),
   ascendBtn:      $('#btn-ascend'),
@@ -136,17 +141,21 @@ const dom = {
   settingsBtn:        $('#btn-settings'),
   settingsModal:      $('#settings-modal'),
   settingsCloseBtn:   $('#btn-settings-close'),
+  autoSaveToggle:     $('#settings-auto-save'),
+  showWelcomeToggle:  $('#settings-show-welcome'),
   clearSaveBtn:       $('#btn-clear-save'),
   clearSaveConfirm:   $('#clear-save-confirm'),
   clearConfirmYes:    $('#btn-clear-confirm-yes'),
   clearConfirmNo:     $('#btn-clear-confirm-no'),
-  upgradeList:    $('#upgrade-list'),
-  kbBuyRange:     $('#kb-buy-range'),
+  upgradeList:       $('#upgrade-list'),
+  archetypeSelect:   $('#archetype-select'),
+  kbBuyRange:        $('#kb-buy-range'),
   eventOverlay:   $('#event-overlay'),
   eventText:      $('#event-text'),
   eventTimer:     $('#event-timer'),
   eventActionBtn: $('#event-action-btn'),
   prestigeContent:    $('#prestige-content'),
+  runStats:           $('#run-stats'),
   ascensionModal:     $('#ascension-modal'),
   ascensionBadge:     $('#ascension-badge'),
   ascensionCount:     $('#ascension-count'),
@@ -275,7 +284,7 @@ function processNotifications(notifs) {
       showToast('The Golden Ouroboros fades away...', 'info');
     } else if (n.startsWith('frenzy_end:')) {
       const parts = n.split(':');
-      showToast(`🐍 Frenzy over! ${parts[1]} bites → +${parts[2]} Essence!`, 'warning');
+      showToast(`🐍 Frenzy over! ${parts[1]} bites`, 'warning');
     } else if (n.startsWith('challenge_start:')) {
       showToast(`⚡ Challenge: ${n.split(':', 2)[1]}`, 'warning');
     } else if (n.startsWith('challenge_complete:')) {
@@ -293,12 +302,15 @@ function processNotifications(notifs) {
       showToast('✦ Ancient Echo: free upgrade available! Press E!', 'warning');
     } else if (n === 'echo_expired') {
       showToast('The Ancient Echo fades...', 'info');
-    } else if (n.startsWith('archetype_awakened:')) {
+    } else if (n.startsWith('archetype_unlocked:')) {
       const id   = n.split(':')[1];
       const arch = ALL_ARCHETYPES[id];
-      if (arch) showToast(`⚔ ${arch.name} awakens! Press T to transform.`, 'warning');
-    } else if (n.startsWith('archetype_offer_expired:')) {
-      showToast('The awakening fades...', 'info');
+      if (arch && !(meta.unlocked_archetypes || []).includes(id)) {
+        meta.unlocked_archetypes = (meta.unlocked_archetypes || []).concat([id]);
+        saveMeta(meta);
+        showToast(`⚔ ${arch.name} unlocked! Select it from the Archetype panel.`, 'success');
+        _lastArchetypeSelectKey = '';  // force re-render
+      }
     }
   }
 }
@@ -311,9 +323,11 @@ function renderAll() {
   if (!state) return;
   renderHUD();
   renderSnake();
+  renderArchetypeSelect();
   renderUpgrades();
   renderEvents();
   renderPrestige();
+  renderRunStats();
   renderAscensionBadge();
 }
 
@@ -322,7 +336,6 @@ function renderHUD() {
   dom.essence.textContent  = formatNumber(s.essence);
   dom.perPress.textContent = formatNumber(s.essence_per_press);
   dom.idle.textContent     = formatNumber(s.idle_income_per_s) + '/s';
-  dom.length.textContent   = s.snake_length;
   dom.stage.textContent    = _growthStage(s);
   dom.scales.textContent   = formatNumber(s.scales);
   dom.combo.textContent    = `${s.combo_multiplier.toFixed(1)}x`;
@@ -349,31 +362,342 @@ function renderHUD() {
     dom.combo.style.textShadow = '';
   }
 
-  // Goal bar
-  const goal = _goalInfo(s);
-  dom.goalText.textContent = goal.text;
-  dom.goalBar.style.width  = `${(goal.pct * 100).toFixed(1)}%`;
-  dom.goalPct.textContent  = `${(goal.pct * 100).toFixed(0)}%`;
-
-  // Archetype & active debuff (with countdown)
-  const arch = ALL_ARCHETYPES[s.archetype_id];
-  if (arch) {
-    dom.archetype.textContent = `⚔ ${arch.name}: ${arch.tagline}`;
-  } else {
-    // Show resonance progress toward each archetype
-    const p1 = `${s.resonance_perfects}/8 perfects`;
-    const p2 = `${Math.floor(Math.min(100, (s.combo_peak_seconds / 15) * 100))}% peak combo`;
-    const p3 = `${Math.floor(Math.min(100, (s.idle_seconds / 45) * 100))}% patience`;
-    dom.archetype.textContent = `⚔ Awakening: ${p1} · ${p2} · ${p3}`;
-  }
+  // Active debuff (with countdown) — shown in the rhythm hint slot
+  // Full/shed-ready takes priority over debuff display
   const debuff = ALL_DEBUFFS[s.debuff_id];
-  if (debuff && s.debuff_end_time > now()) {
+  if (canShed(s)) {
+    dom.rhythmHint.textContent = '── coil is full  ✦  shed your skin ──';
+    dom.rhythmHint.className = 'rhythm-hint full-mode';
+  } else if (debuff && s.debuff_end_time > now()) {
     const rem = Math.max(0, s.debuff_end_time - now()).toFixed(1);
-    dom.curse.textContent = `⚡ ${debuff.name}: ${debuff.description} (${rem}s)`;
-    dom.curse.className = 'curse-info debuff-active';
+    dom.rhythmHint.textContent = `⚡ ${debuff.name}: ${debuff.description} (${rem}s)`;
+    dom.rhythmHint.className = 'rhythm-hint debuff-active';
+  } else if (s.post_frenzy_bpm > 0) {
+    dom.rhythmHint.textContent = '── the coil settles ──';
+    dom.rhythmHint.className = 'rhythm-hint post-frenzy';
   } else {
-    dom.curse.textContent = '';
-    dom.curse.className = 'curse-info';
+    dom.rhythmHint.textContent = '── bite the tail on the beat ──';
+    dom.rhythmHint.className = 'rhythm-hint';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Snake rendering helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const STAGE_ICONS = ['🥚','🐍','🦎','🗺️','🏛️','🌍','🌎','⭐','🌌','🔮'];
+
+function _stageColor(stageIdx, isFrenzy) {
+
+  switch (stageIdx) {
+
+    case 0: { // Cracked egg
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + r * 0.08, r * 0.55, r * 0.70, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r * 0.62);
+      ctx.lineTo(cx - r * 0.13, cy - r * 0.22);
+      ctx.lineTo(cx + r * 0.11, cy + r * 0.04);
+      ctx.lineTo(cx, cy + r * 0.28);
+      ctx.stroke();
+      break;
+    }
+
+    case 1: { // Tangle of baby snakes — three S-curves
+      const curves = [
+        [[-r*.42,-r*.48],[r*.38,-r*.25],[-r*.38,r*.12],[r*.22,r*.48]],
+        [[-r*.10,-r*.52],[r*.42,-r*.10],[-r*.28,r*.28],[r*.08,r*.54]],
+        [[-r*.55,-r*.08],[r*.12,-r*.44],[-r*.10,r*.46],[r*.52,r*.06]],
+      ];
+      for (const [[x0,y0],[c0x,c0y],[c1x,c1y],[x1,y1]] of curves) {
+        ctx.beginPath();
+        ctx.moveTo(cx+x0, cy+y0);
+        ctx.bezierCurveTo(cx+c0x,cy+c0y, cx+c1x,cy+c1y, cx+x1,cy+y1);
+        ctx.stroke();
+      }
+      break;
+    }
+
+    case 2: { // Small mouse
+      // body
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + r * 0.12, r * 0.50, r * 0.40, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      // ears
+      ctx.beginPath(); ctx.arc(cx - r*0.34, cy - r*0.32, r*0.20, 0, Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx + r*0.34, cy - r*0.32, r*0.20, 0, Math.PI*2); ctx.stroke();
+      // tail
+      ctx.beginPath();
+      ctx.moveTo(cx + r*0.48, cy + r*0.18);
+      ctx.bezierCurveTo(cx+r*.85, cy+r*.10, cx+r*.88, cy+r*.72, cx+r*.58, cy+r*.78);
+      ctx.stroke();
+      // eye
+      ctx.beginPath(); ctx.arc(cx + r*0.12, cy + r*0.04, r*0.07, 0, Math.PI*2); ctx.fill();
+      break;
+    }
+
+    case 3: { // Buffalo
+      // body hump
+      ctx.beginPath();
+      ctx.ellipse(cx - r*0.08, cy + r*0.18, r*0.58, r*0.42, -0.12, 0, Math.PI*2);
+      ctx.stroke();
+      // head
+      ctx.beginPath();
+      ctx.ellipse(cx + r*0.44, cy + r*0.28, r*0.26, r*0.20, 0.25, 0, Math.PI*2);
+      ctx.stroke();
+      // left horn
+      ctx.beginPath();
+      ctx.moveTo(cx - r*0.12, cy - r*0.22);
+      ctx.bezierCurveTo(cx-r*.42, cy-r*.60, cx-r*.68, cy-r*.38, cx-r*.52, cy-r*.12);
+      ctx.stroke();
+      // right horn
+      ctx.beginPath();
+      ctx.moveTo(cx + r*0.18, cy - r*0.18);
+      ctx.bezierCurveTo(cx+r*.46, cy-r*.56, cx+r*.70, cy-r*.32, cx+r*.54, cy-r*.08);
+      ctx.stroke();
+      break;
+    }
+
+    case 4: { // Pillar crushed by coil
+      const ph = r * 1.30, pw = r * 0.18;
+      ctx.strokeRect(cx - pw, cy - ph*0.5, pw*2, ph);
+      // three coil ellipses
+      for (let i = 0; i < 3; i++) {
+        const y = cy - ph*0.28 + i * ph*0.28;
+        ctx.beginPath();
+        ctx.ellipse(cx, y, r*0.58, r*0.16, 0, 0, Math.PI*2);
+        ctx.stroke();
+      }
+      break;
+    }
+
+    case 5: { // Continent encircled
+      // landmass blob
+      ctx.beginPath();
+      ctx.moveTo(cx - r*0.08, cy - r*0.48);
+      ctx.bezierCurveTo(cx+r*.44,cy-r*.58, cx+r*.54,cy-r*.08, cx+r*.28,cy+r*.30);
+      ctx.bezierCurveTo(cx+r*.08,cy+r*.58, cx-r*.40,cy+r*.48, cx-r*.54,cy+r*.08);
+      ctx.bezierCurveTo(cx-r*.62,cy-r*.22, cx-r*.44,cy-r*.38, cx-r*.08,cy-r*.48);
+      ctx.stroke();
+      // encircling arc with arrow
+      ctx.beginPath();
+      ctx.arc(cx, cy, r*0.84, -Math.PI*0.62, Math.PI*0.42, false);
+      ctx.stroke();
+      // arrowhead at arc start
+      const aStart = -Math.PI*0.62;
+      const ax = cx + r*0.84*Math.cos(aStart), ay = cy + r*0.84*Math.sin(aStart);
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax - r*0.14, ay - r*0.06);
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax - r*0.06, ay + r*0.14);
+      ctx.stroke();
+      break;
+    }
+
+    case 6: { // Globe with coils
+      ctx.beginPath(); ctx.arc(cx, cy, r*0.60, 0, Math.PI*2); ctx.stroke();
+      // equator
+      ctx.beginPath(); ctx.ellipse(cx, cy, r*0.60, r*0.18, 0, 0, Math.PI*2); ctx.stroke();
+      // coil arcs above and below
+      ctx.beginPath(); ctx.arc(cx, cy - r*0.08, r*0.80, Math.PI*0.18, Math.PI*0.82, false); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy + r*0.10, r*0.80, -Math.PI*0.82, -Math.PI*0.18, false); ctx.stroke();
+      break;
+    }
+
+    case 7: { // Imploding star
+      const spikes = 5, oR = r*0.68, iR = r*0.27;
+      ctx.beginPath();
+      for (let i = 0; i < spikes*2; i++) {
+        const a = (i * Math.PI / spikes) - Math.PI/2;
+        const rad = i%2 === 0 ? oR : iR;
+        i === 0 ? ctx.moveTo(cx+rad*Math.cos(a), cy+rad*Math.sin(a))
+                : ctx.lineTo(cx+rad*Math.cos(a), cy+rad*Math.sin(a));
+      }
+      ctx.closePath(); ctx.stroke();
+      // consumed centre
+      ctx.beginPath(); ctx.arc(cx, cy, r*0.18, 0, Math.PI*2); ctx.fill();
+      break;
+    }
+
+    case 8: { // Black hole + accretion disk
+      // event horizon
+      ctx.beginPath(); ctx.arc(cx, cy, r*0.26, 0, Math.PI*2); ctx.fill();
+      // accretion disk
+      ctx.beginPath(); ctx.ellipse(cx, cy, r*0.72, r*0.20, 0.28, 0, Math.PI*2); ctx.stroke();
+      // outer halo
+      ctx.save(); ctx.globalAlpha = 0.38;
+      ctx.beginPath(); ctx.ellipse(cx, cy, r*0.88, r*0.30, 0.28, 0, Math.PI*2); ctx.stroke();
+      ctx.restore();
+      // lensing arc
+      ctx.beginPath(); ctx.arc(cx, cy - r*0.04, r*0.52, Math.PI*1.12, Math.PI*1.88, false); ctx.stroke();
+      break;
+    }
+
+    case 9: { // Eye of the cosmos
+      // almond outline
+      ctx.beginPath();
+      ctx.moveTo(cx - r*0.74, cy);
+      ctx.bezierCurveTo(cx-r*.28,cy-r*.54, cx+r*.28,cy-r*.54, cx+r*.74,cy);
+      ctx.bezierCurveTo(cx+r*.28,cy+r*.54, cx-r*.28,cy+r*.54, cx-r*.74,cy);
+      ctx.closePath(); ctx.stroke();
+      // iris
+      ctx.beginPath(); ctx.arc(cx, cy, r*0.34, 0, Math.PI*2); ctx.stroke();
+      // pupil
+      ctx.beginPath(); ctx.arc(cx, cy, r*0.13, 0, Math.PI*2); ctx.fill();
+      // star rays between iris and pupil
+      for (let i = 0; i < 6; i++) {
+        const a = (i * Math.PI) / 3;
+        ctx.beginPath();
+        ctx.moveTo(cx + r*0.15*Math.cos(a), cy + r*0.15*Math.sin(a));
+        ctx.lineTo(cx + r*0.31*Math.cos(a), cy + r*0.31*Math.sin(a));
+        ctx.stroke();
+      }
+      break;
+    }
+
+    default: { // fallback: simple arc
+      ctx.beginPath(); ctx.arc(cx, cy, r*0.58, 0, Math.PI*1.8); ctx.stroke();
+      break;
+    }
+  }
+  ctx.restore();
+}
+
+function _stageColor(stageIdx, isFrenzy) {
+  if (isFrenzy)          return [255, 160,   0];
+  if (stageIdx >= 8)     return [200, 120, 255];
+  if (stageIdx >= 6)     return [100, 160, 255];
+  if (stageIdx >= 4)     return [  0, 220, 255];
+  return [  0, 255, 136];
+}
+
+// Shed animation state
+let _shedAnim = null; // { startTime, duration, fromStageIdx }
+
+function _startShedAnim(s) {
+  _shedAnim = {
+    startTime:    performance.now() / 1000,
+    duration:     2.0,
+    fromStageIdx: s.current_stage_index || 0,
+  };
+}
+
+function _drawShedAnim(ctx, W, H, cx, cy, ringR, t) {
+  const fromIdx  = _shedAnim.fromStageIdx;
+  const [R,G,B]  = _stageColor(fromIdx, false);
+  const col      = `rgb(${R},${G},${B})`;
+  const colA     = (a) => `rgba(${R},${G},${B},${a})`;
+
+  // Phase 1 (0 → 0.60): mouth gap closes, whole ring speeds up its spin
+  // Phase 2 (0.60 → 0.80): expanding flash burst
+  // Phase 3 (0.80 → 1.00): new (next-stage) baby snake fades in
+
+  if (t < 0.60) {
+    const spinAngle  = (t / 0.60) * Math.PI * 3.5;       // 1.75 full turns
+    const mouthGap   = 0.03 * Math.max(0, 1 - t / 0.25); // closes by t=0.25
+    const lineW      = ringR * 0.26;                       // thick shedding ring
+    const glow       = lineW * (1.0 + t * 2.5);
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(spinAngle);
+
+    // Ghost track
+    ctx.globalAlpha = 0.14;
+    ctx.strokeStyle = col;
+    ctx.lineWidth   = lineW * 0.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, ringR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Body arc
+    const startAngle = -Math.PI / 2 + mouthGap * Math.PI * 2;
+    const endAngle   = -Math.PI / 2 + (1.0 - mouthGap) * Math.PI * 2;
+    ctx.globalAlpha = 1.0;
+    ctx.strokeStyle = col;
+    ctx.lineWidth   = lineW;
+    ctx.lineCap     = 'round';
+    ctx.shadowColor = col;
+    ctx.shadowBlur  = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, ringR, startAngle, endAngle);
+    ctx.stroke();
+    ctx.restore();
+
+  } else if (t < 0.80) {
+    const flashT = (t - 0.60) / 0.20; // 0→1
+    const alpha  = 1.0 - flashT;
+    const bR     = ringR * (1.0 + flashT * 1.2);
+
+    ctx.save();
+    // Outer colour burst
+    ctx.globalAlpha = alpha * 0.75;
+    ctx.fillStyle   = col;
+    ctx.shadowColor = col;
+    ctx.shadowBlur  = bR * 1.8;
+    ctx.beginPath();
+    ctx.arc(cx, cy, bR, 0, Math.PI * 2);
+    ctx.fill();
+    // Inner white core
+    ctx.globalAlpha = alpha;
+    ctx.shadowBlur  = bR * 0.8;
+    ctx.fillStyle   = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(cx, cy, bR * 0.55, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+  } else {
+    const fadeT     = (t - 0.80) / 0.20; // 0→1
+    const nextIdx   = Math.min(fromIdx + 1, BALANCE.prestige.growth_stages.length - 1);
+    const [nR,nG,nB] = _stageColor(nextIdx, false);
+    const nCol      = `rgb(${nR},${nG},${nB})`;
+    const nColA     = (a) => `rgba(${nR},${nG},${nB},${a})`;
+    const lineW     = ringR * 0.10;
+
+    ctx.save();
+    ctx.globalAlpha = fadeT;
+
+    // Ghost track
+    ctx.strokeStyle = nColA(0.12);
+    ctx.lineWidth   = lineW * 0.55;
+    ctx.beginPath();
+    ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Small baby body (just a sliver)
+    ctx.strokeStyle = nCol;
+    ctx.lineWidth   = lineW;
+    ctx.lineCap     = 'round';
+    ctx.shadowColor = nCol;
+    ctx.shadowBlur  = lineW * 1.2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, ringR,
+      -Math.PI / 2 + 0.92 * Math.PI * 2,
+      -Math.PI / 2 + 0.97 * Math.PI * 2);
+    ctx.stroke();
+
+    // Head
+    const hAngle = -Math.PI / 2 + 0.97 * Math.PI * 2;
+    const headR  = lineW * 0.78;
+    ctx.shadowBlur = headR * 2.5;
+    ctx.fillStyle  = nCol;
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(hAngle) * ringR,
+            cy + Math.sin(hAngle) * ringR, headR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Center icon (next stage)
+    const iconSize = Math.round(ringR * 0.60);
+    ctx.shadowBlur    = 0;
+    ctx.font          = `${iconSize}px serif`;
+    ctx.textAlign     = 'center';
+    ctx.textBaseline  = 'middle';
+    ctx.fillText(STAGE_ICONS[nextIdx] || '🐍', cx, cy);
+
+    ctx.restore();
   }
 }
 
@@ -383,118 +707,196 @@ function renderSnake() {
   if (!canvas) return;
   if (typeof canvas.getContext !== 'function') return;
 
-  // Force bitmap size — attributes may parse as strings in some browsers
-  canvas.width  = 200;
-  canvas.height = 200;
-  const W = 200, H = 200;
+  canvas.width  = 160;
+  canvas.height = 160;
+  const W = 160, H = 160;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, W, H);
 
-  const cx = W / 2;
-  const cy = H / 2;
+  const cx    = W / 2;
+  const cy    = H / 2;
+  const ringR = Math.min(W, H) * 0.38;
+
+  // ── Shed animation takes full control ─────────────────────────────────────
+  if (_shedAnim) {
+    const elapsed = performance.now() / 1000 - _shedAnim.startTime;
+    const t       = elapsed / _shedAnim.duration;
+    if (t >= 1.0) {
+      // Animation complete — perform the actual shed
+      _shedAnim = null;
+      const scalesEarned = performShed(state);
+      const stageName    = _growthStage(state);
+      showToast(`🐍 Shed Skin → ${stageName}! +${Math.floor(scalesEarned)} Scales`, 'warning');
+      refreshOfferings(state, getUnlockedUpgradeSet(meta));
+      computeDerived(state);
+      renderAll();
+      return;
+    }
+    _drawShedAnim(ctx, W, H, cx, cy, ringR, t);
+    // Keep shed bar at 100% during animation
+    dom.shedBarFill.style.width = '100%';
+    dom.shedBarFill.className   = 'shed-bar-fill shed-ready';
+    dom.shedBarLabel.textContent = 'Shedding…';
+    dom.snakeLength.textContent  = s.snake_length;
+    return;
+  }
 
   // ── Stage / frenzy color ──────────────────────────────────────────────────
   const isFrenzy = s.frenzy_active;
   const stageIdx = s.current_stage_index || 0;
-  let R, G, B;
-  if      (isFrenzy)      [R,G,B] = [255, 160,   0];
-  else if (stageIdx >= 8) [R,G,B] = [200, 120, 255];
-  else if (stageIdx >= 6) [R,G,B] = [100, 160, 255];
-  else if (stageIdx >= 4) [R,G,B] = [  0, 220, 255];
-  else                    [R,G,B] = [  0, 255, 136];
-  const col  = `rgb(${R},${G},${B})`;
-  const colA = (a) => `rgba(${R},${G},${B},${a})`;
+  const [R,G,B]  = _stageColor(stageIdx, isFrenzy);
+  const col      = `rgb(${R},${G},${B})`;
+  const colA     = (a) => `rgba(${R},${G},${B},${a})`;
 
-  // ── Geometry ──────────────────────────────────────────────────────────────
-  const maxR   = Math.min(W, H) * 0.38;   // outermost ring radius
-  const innerR = maxR * 0.28;             // innermost coil radius
-  // Coils: 1 ring early-game → up to 4 at cosmic
-  const totalCoils = 1 + Math.min(3, stageIdx * 0.4);
-  const ringGap    = totalCoils > 1 ? (maxR - innerR) / (totalCoils - 1) : 0;
+  // ── Stage-relative girth & body coverage ──────────────────────────────────
+  const stages       = BALANCE.prestige.growth_stages;
+  const stageFloor   = stages[stageIdx][0];
+  const nextIdx      = stageIdx + 1;
+  const stageCeiling = nextIdx < stages.length ? stages[nextIdx][0] : stageFloor * 2;
+  const stageRange   = Math.max(1, stageCeiling - stageFloor);
+  const stageProgress = Math.min(1.0, Math.max(0.0,
+    (s.snake_length - stageFloor) / stageRange));
 
-  // Snake girth: thick at all stages, grows with log of length
-  const MAX_LEN  = 900_000;
-  const logFrac  = Math.log1p(s.snake_length) / Math.log1p(MAX_LEN); // 0→1
-  const lineW    = maxR * (0.10 + 0.16 * logFrac);  // 10%→26% of ring radius
+  // Minimum visual progress so the snake always has a small visible body.
+  const MIN_DISPLAY = 0.14;
+  const displayProgress = Math.max(MIN_DISPLAY, stageProgress);
+  // lineW: thin at start of stage, thick by end  (10 % → 30 % of ring radius)
+  const lineW    = ringR * (0.10 + 0.20 * displayProgress);
+  // tailFrac: 0 = full circle, 1 = empty.  Clamped so body always shows ~14 %.
+  const tailFrac   = Math.max(0, 1.0 - displayProgress * 1.05);
+  const isShedReady = canShed(s);
+  // Gap sits on the TAIL side when shed-ready (mouth faces tail tip)
+  // so body runs from (tailFrac + gap) → 1.0.  Normally: tailFrac → 1.0, no gap.
+  const MOUTH_GAP  = 0.028;
+  const bodyStart  = tailFrac + (isShedReady ? MOUTH_GAP : 0);
+  const bodyEnd    = 1.0;
+  let tailTipX = null;
+  let tailTipY = null;
 
-  // Body arc: portion of the spiral covered by the snake.
-  // tailFrac=1 means no body; shrinks toward 0 over the game.
-  const tailFrac  = Math.max(0, 1 - logFrac * 1.05);
-  const MOUTH_GAP = 0.03;  // gap between tail tip and head (the bite point)
+  // ── Helper: point on the single circle ring ───────────────────────────────
+  const circlePt = (frac) => {
+    const angle = -Math.PI / 2 + frac * Math.PI * 2;
+    return [cx + Math.cos(angle) * ringR, cy + Math.sin(angle) * ringR];
+  };
 
-  // Map t∈[0,1] to (x,y) on the Archimedean spiral
-  function spiralPt(t) {
-    const angle = -Math.PI / 2 + t * totalCoils * Math.PI * 2;
-    const r     = maxR - t * (totalCoils - 1) * ringGap;
-    return [cx + Math.cos(angle) * r, cy + Math.sin(angle) * r];
-  }
-
-  // ── Ghost ring (always-visible faint track) ───────────────────────────────
+  // ── Ghost ring ────────────────────────────────────────────────────────────
   ctx.save();
-  ctx.globalAlpha = 0.12;
+  ctx.globalAlpha = 0.05;
   ctx.strokeStyle = col;
   ctx.lineWidth   = lineW * 0.55;
-  ctx.lineCap     = 'round';
-  ctx.lineJoin    = 'round';
   ctx.beginPath();
-  const GSTEPS = 120;
-  for (let i = 0; i <= GSTEPS; i++) {
-    const [x, y] = spiralPt(i / GSTEPS);
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  }
+  ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
   ctx.stroke();
   ctx.restore();
 
-  // ── Body stroke ───────────────────────────────────────────────────────────
-  const bodyEnd   = 1 - MOUTH_GAP;
-  const BSTEPS    = 80;
-  if (tailFrac < bodyEnd) {
-    // Build gradient along the body path for tail→head fade-in
-    const [tx0, ty0] = spiralPt(tailFrac);
-    const [tx1, ty1] = spiralPt(bodyEnd);
-    const grad = ctx.createLinearGradient(tx0, ty0, tx1, ty1);
-    grad.addColorStop(0, colA(0.15));
-    grad.addColorStop(1, colA(1.0));
-
+  // ── Body arc (head-bright → tail-dim gradient) ──────────────────────────
+  if (bodyStart < bodyEnd) {
+    const startAngle = -Math.PI / 2 + bodyStart * Math.PI * 2;
+    const endAngle   = -Math.PI / 2 + bodyEnd   * Math.PI * 2;
+    // Conic gradient centred on the ring centre sweeps with the arc.
+    // Stop 0 is at startAngle (tail), stop arcFrac is at endAngle (head).
+    const arcFrac = (endAngle - startAngle) / (Math.PI * 2);
+    const bodyGrad = ctx.createConicGradient(startAngle, cx, cy);
+    bodyGrad.addColorStop(0,        colA(0.25));  // tail: dark
+    bodyGrad.addColorStop(arcFrac,  colA(0.95));  // head: bright
+    bodyGrad.addColorStop(1,        colA(0.25));  // wrap (not visible)
     ctx.save();
-    ctx.strokeStyle = grad;
+    ctx.strokeStyle = bodyGrad;
     ctx.lineWidth   = lineW;
-    ctx.lineCap     = 'round';
-    ctx.lineJoin    = 'round';
+    ctx.lineCap     = 'butt';
     ctx.shadowColor = col;
     ctx.shadowBlur  = lineW * 1.2;
     ctx.beginPath();
-    for (let i = 0; i <= BSTEPS; i++) {
-      const t      = tailFrac + (i / BSTEPS) * (bodyEnd - tailFrac);
-      const [x, y] = spiralPt(t);
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    }
+    ctx.arc(cx, cy, ringR, startAngle, endAngle);
     ctx.stroke();
     ctx.restore();
   }
 
-  // ── Head ─────────────────────────────────────────────────────────────────
-  const headR  = lineW * 0.78;  // slightly wider than body
-  const [hx, hy] = spiralPt(1);
+  // ── Tapered tail tip ── hidden when shed-ready (tip would sit inside open mouth)
+  if (tailFrac < 0.98 && !isShedReady) {
+    const ta       = -Math.PI / 2 + tailFrac * Math.PI * 2;
+    const [tx, ty] = circlePt(tailFrac);
+    // Normal direction: backward (CCW, away from body).
+    // When shed-ready: forward (CW, toward head/mouth) so the tip sits in the gap.
+    const sign = isShedReady ? -1 : 1;
+    const bx = sign * Math.sin(ta);
+    const by = sign * (-Math.cos(ta));
+    // perpendicular to tangent (body width axis)
+    const px = Math.cos(ta);
+    const py = Math.sin(ta);
+    ctx.save();
+    ctx.fillStyle   = colA(0.25);  // match tail-end of body gradient
+    ctx.shadowColor = col;
+    ctx.shadowBlur  = lineW * 0.7;
+    ctx.beginPath();
+    tailTipX = tx + bx * lineW * 0.85;
+    tailTipY = ty + by * lineW * 0.85;
+    ctx.moveTo(tailTipX, tailTipY); // point
+    ctx.lineTo(tx + px * lineW * 0.52, ty + py * lineW * 0.52); // right base
+    ctx.lineTo(tx - px * lineW * 0.52, ty - py * lineW * 0.52); // left base
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
 
+  // ── Head ─────────────────────────────────────────────────────────────────
+  const headR     = lineW * 0.78;
+  const [hx, hy]  = circlePt(1.0);
+
+  ctx.save();
   ctx.shadowColor = col;
   ctx.shadowBlur  = headR * 2.5;
   ctx.fillStyle   = col;
+  // Pac-man head: always draw with a mouth gap.
+  // At frac=1.0 (12 o'clock) the forward CW tangent is canvas angle 0 (right).
+  const mouthHalf = isShedReady ? 0.68 : 0.46; // wider mouth when ready to shed
+  const mouthDir  = 0; // mouth opens rightward
   ctx.beginPath();
-  ctx.arc(hx, hy, headR, 0, Math.PI * 2);
+  ctx.moveTo(hx, hy);
+  ctx.arc(hx, hy, headR, mouthDir + mouthHalf, mouthDir - mouthHalf + Math.PI * 2, false);
+  ctx.closePath();
   ctx.fill();
-  ctx.shadowBlur = 0;
+  ctx.restore();
+  ctx.shadowBlur  = 0;
 
-  // Eye
-  const eyeR  = headR * 0.38;
-  const [ex, ey] = [hx + headR * 0.28, hy - headR * 0.20];
+  // Eye: upper-left of head (away from mouth, which opens right)
+  const eyeR = headR * 0.38;
+  const ex = hx - headR * 0.22;
+  const ey = hy - headR * 0.38;
   ctx.fillStyle = 'rgba(0,0,0,0.75)';
   ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#fff';
   ctx.beginPath(); ctx.arc(ex, ey, eyeR * 0.42, 0, Math.PI * 2); ctx.fill();
 
-  // ── Label ─────────────────────────────────────────────────────────────────
-  dom.snakeLength.textContent = `Length: ${s.snake_length}`;
+  // ── Center stage icon ─────────────────────────────────────────────────────
+  const iconSize = Math.round(ringR * 0.62);
+  ctx.font          = `${iconSize}px serif`;
+  ctx.textAlign     = 'center';
+  ctx.textBaseline  = 'middle';
+  ctx.globalAlpha   = 0.85;
+  ctx.fillText(STAGE_ICONS[stageIdx] || '🐍', cx, cy);
+  ctx.globalAlpha   = 1.0;
+
+  // ── Length label & shed bar ───────────────────────────────────────────────
+  dom.snakeLength.textContent = s.snake_length;
+
+  const shedInfo = _shedInfo(s);
+  if (shedInfo.status === 'ascend') {
+    dom.shedBarFill.style.width  = '100%';
+    dom.shedBarFill.className    = 'shed-bar-fill shed-ascend';
+    dom.shedBarLabel.textContent = '✦ Ready to Ascend!';
+  } else if (shedInfo.status === 'ready') {
+    dom.shedBarFill.style.width  = '100%';
+    dom.shedBarFill.className    = 'shed-bar-fill shed-ready';
+    dom.shedBarLabel.textContent = `Shed → ${shedInfo.next_stage} (+${shedInfo.reward} Scales)`;
+  } else {
+    const pct = shedInfo.threshold > 0
+      ? Math.min(100, shedInfo.current / shedInfo.threshold * 100) : 0;
+    dom.shedBarFill.style.width  = `${pct.toFixed(1)}%`;
+    dom.shedBarFill.className    = 'shed-bar-fill';
+    dom.shedBarLabel.textContent =
+      `Next: ${shedInfo.next_stage} (${formatNumber(shedInfo.current)}/${formatNumber(shedInfo.threshold)})`;
+  }
 
   if (isFrenzy) {
     dom.snakeArt.classList.add('frenzy-mode');
@@ -503,6 +905,22 @@ function renderSnake() {
     dom.snakeArt.classList.remove('frenzy-mode');
   }
   dom.biteBtn.classList.toggle('frenzy-mode', !!isFrenzy);
+  dom.biteBtn.classList.toggle('full-mode', !isFrenzy && canShed(s));
+}
+
+// Format large counts as compact strings: 999 → "999", 1000 → "1k", 1500 → "1.5k", etc.
+function fmtCount(n) {
+  const tiers = [[1e12,'T'],[1e9,'B'],[1e6,'M'],[1e3,'k']];
+  for (const [div, sfx] of tiers) {
+    if (n >= div) {
+      const v = n / div;
+      const s = v >= 100 ? Math.round(v).toString()
+               : v >= 10  ? v.toFixed(1)
+               :             v.toFixed(2);
+      return s.replace(/\.?0+$/, '') + sfx;
+    }
+  }
+  return String(n);
 }
 
 function renderRhythm() {
@@ -516,16 +934,21 @@ function renderRhythm() {
   const timingWindowS  = getTimingWindowS(s);
   const perfectWindowS = getPerfectWindowS(s);
 
-  dom.rhythmBpm.textContent   = `${bpm.toFixed(0)} BPM`;
-  dom.rhythmCombo.textContent = `${s.combo_multiplier.toFixed(1)}x`;
-  dom.rhythmHits.textContent  = `${s.combo_hits} hits`;
+  dom.rhythmBpm.textContent   = `${bpm.toFixed(0)} target`;
+  dom.rhythmCombo.textContent = `${s.combo_multiplier.toFixed(1)} mult`;
+  if (dom.rhythmComboCount) {
+    dom.rhythmComboCount.textContent = `${fmtCount(s.combo_hits || 0)} combo`;
+  }
+  if (dom.rhythmPerfectStreak) {
+    dom.rhythmPerfectStreak.textContent = `${fmtCount(s.perfect_streak || 0)} perfect`;
+  }
   if (dom.rhythmTapBpm) {
     // Latch tap BPM once per beat (when the cursor finishes a pass) so the
     // value is stable and readable rather than flickering every frame.
     const currentBeatIndex = Math.floor((_beatCache.t - s.beat_origin) / beatInterval);
     if (currentBeatIndex !== _lastBeatIndexForTap) {
       _lastBeatIndexForTap = currentBeatIndex;
-      _tapBpmLocked = s.rolling_bpm > 0 ? `${Math.round(s.rolling_bpm)} tap` : '— tap';
+      _tapBpmLocked = s.rolling_bpm > 0 ? `${Math.round(s.rolling_bpm)} rate` : '— rate';
     }
     dom.rhythmTapBpm.textContent = _tapBpmLocked;
   }
@@ -557,6 +980,12 @@ function renderRhythm() {
     dom.jawBot.className   = 'jaw jaw-frenzy';
     dom.jawHint.textContent = 'MASH!';
     dom.jawHint.className   = 'jaw-hint hint-frenzy';
+    const barTrack = dom.beatCursor.parentElement;
+    if (barTrack) {
+      dom.beatCursor.style.left   = `${barTrack.offsetWidth * 0.5}px`;
+      dom.beatGood.style.width    = '0px';
+      dom.beatPerfect.style.width = '0px';
+    }
     return;
   }
 
@@ -624,6 +1053,95 @@ function renderRhythm() {
 }
 
 let _lastOfferingsKey = null;
+
+const _ARCHETYPE_KEYS = [
+  { id: 'coiled_striker',    key: 'Z' },
+  { id: 'rhythm_incarnate',  key: 'X' },
+  { id: 'patient_ouroboros', key: 'C' },
+];
+
+const _ARCHETYPE_UNLOCK_HINTS = {
+  coiled_striker:    'Sustain a 5.0x combo for 15 seconds',
+  rhythm_incarnate:  'Land 15 consecutive perfect bites',
+  patient_ouroboros: 'Accumulate 45 seconds of idle time',
+};
+
+function _fmtCooldown(secs) {
+  const m = Math.floor(secs / 60);
+  const s = Math.ceil(secs % 60);
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+let _lastArchetypeSelectKey = '';
+
+function renderArchetypeSelect() {
+  if (!dom.archetypeSelect || !state || !meta) return;
+  const currentId   = state.archetype_id;
+  const unlocked    = meta.unlocked_archetypes || [];
+  const cooldownRem = Math.max(0, state.archetype_switch_available_at - now());
+  const cacheKey    = `${currentId}|${unlocked.slice().sort().join(',')}|${Math.floor(cooldownRem)}`;
+  if (cacheKey === _lastArchetypeSelectKey) return;
+  _lastArchetypeSelectKey = cacheKey;
+
+  let html = '';
+  _ARCHETYPE_KEYS.forEach(({ id, key }) => {
+    const arch = ALL_ARCHETYPES[id];
+    if (!arch) return;
+    const isActive    = id === currentId;
+    const isLocked    = !unlocked.includes(id);
+    const onCooldown  = !isActive && !isLocked && cooldownRem > 0;
+
+    let classes = 'archetype-card';
+    if (isActive)   classes += ' active';
+    if (isLocked)   classes += ' locked';
+    if (onCooldown) classes += ' on-cooldown';
+
+    let badgeHtml = '';
+    if (isActive) {
+      const badgeText = cooldownRem > 0
+        ? `ACTIVE &bull; switch in ${_fmtCooldown(cooldownRem)}`
+        : 'ACTIVE';
+      badgeHtml = `<span class="archetype-active-badge">${badgeText}</span>`;
+    } else if (onCooldown) {
+      badgeHtml = `<span class="archetype-cooldown-badge">${_fmtCooldown(cooldownRem)}</span>`;
+    }
+
+    const descHtml = isLocked
+      ? `<div class="archetype-unlock-hint">🔒 ${_ARCHETYPE_UNLOCK_HINTS[id]}</div>`
+      : `<div class="upgrade-effect">${arch.description}</div>`;
+
+    html += `
+    <div class="${classes}" data-id="${id}">
+      <div class="upgrade-top">
+        <span>
+          <span class="upgrade-key">${key}</span>
+          <span class="archetype-card-name">${arch.name}</span>
+        </span>
+        ${badgeHtml}
+      </div>
+      <div class="archetype-card-tagline">${arch.tagline}</div>
+      ${descHtml}
+    </div>`;
+  });
+  dom.archetypeSelect.innerHTML = html;
+  dom.archetypeSelect.querySelectorAll('.archetype-card:not(.locked):not(.on-cooldown)').forEach(card => {
+    card.addEventListener('click', () => selectArchetype(card.dataset.id));
+  });
+}
+
+function selectArchetype(id) {
+  if (!state || !ALL_ARCHETYPES[id]) return;
+  if (state.archetype_id === id) return;
+  const unlocked = meta.unlocked_archetypes || [];
+  if (!unlocked.includes(id)) return;
+  if (state.archetype_switch_available_at > now()) return;
+  state.archetype_id = id;
+  state.archetype_switch_available_at = now() + ARCHETYPE_SWITCH_COOLDOWN_S;
+  computeDerived(state);
+  refreshOfferings(state, getUnlockedUpgradeSet(meta));
+  _lastArchetypeSelectKey = '';
+  renderAll();
+}
 
 function renderUpgrades() {
   const offerings = _offeringInfo(state);
@@ -740,15 +1258,6 @@ function renderEvents() {
     dom.eventActionBtn.textContent = isMobile() ? 'Claim' : '[E] Claim';
     dom.eventActionBtn.className   = '';
     dom.eventActionBtn.onclick     = acceptEcho;
-  } else if (s.archetype_offer_id) {
-    const offeredArch = ALL_ARCHETYPES[s.archetype_offer_id];
-    const remaining   = Math.max(0, s.archetype_offer_expires - t);
-    dom.eventOverlay.className     = 'archetype';
-    dom.eventText.textContent      = `⚔ ${offeredArch.name} awakens — ${offeredArch.tagline}`;
-    dom.eventTimer.textContent     = `${remaining.toFixed(1)}s`;
-    dom.eventActionBtn.textContent = isMobile() ? 'Transform' : '[T] Transform';
-    dom.eventActionBtn.className   = '';
-    dom.eventActionBtn.onclick     = acceptArchetypeOffer;
   } else {
     dom.eventOverlay.className = 'hidden';
     dom.eventActionBtn.classList.add('hidden');
@@ -758,22 +1267,61 @@ function renderEvents() {
 function renderPrestige() {
   const info = _shedInfo(state);
   let html = '';
+  let tip = '';
   if (info.status === 'ascend') {
     html = '<span style="color:var(--purple)">✦ Ready to Ascend! Open the upgrade tree.</span>';
+    tip = 'You reached final-stage threshold. Ascend to convert run progress into permanent progression.';
     dom.shedBtn.disabled   = true;
     dom.ascendBtn.disabled = false;
   } else if (info.status === 'ready') {
     html = `<span style="color:var(--yellow)">Shed → ${info.next_stage} (+${info.reward} Scales)</span>`;
+    tip = `Shed now to advance to ${info.next_stage} and gain about ${info.reward} Scales.`;
     dom.shedBtn.disabled   = false;
     dom.ascendBtn.disabled = true;
   } else {
     const pct = info.threshold > 0
       ? Math.min(100, info.current / info.threshold * 100) : 0;
     html = `Next: ${info.next_stage} (${formatNumber(info.current)}/${formatNumber(info.threshold)} — ${pct.toFixed(0)}%)`;
+    tip = `Progress toward ${info.next_stage}: ${pct.toFixed(0)}%.`;
     dom.shedBtn.disabled   = true;
     dom.ascendBtn.disabled = true;
   }
   dom.prestigeContent.innerHTML = html;
+  dom.prestigeContent.title = tip;
+}
+
+function renderRunStats() {
+  if (!dom.runStats || !state || !state.stats) return;
+  const s = state.stats;
+  const scored = Math.max(0, s.scored_bites || 0);
+  const perfect = Math.max(0, s.perfect_bites || 0);
+  const perfectPct = scored > 0 ? (perfect / scored * 100) : 0;
+  dom.runStats.innerHTML = `
+    <div class="run-stat-card" title="Highest combo multiplier reached in this run">
+      <div class="run-stat-label" title="Highest combo multiplier reached in this run">Max Combo</div>
+      <div class="run-stat-value">${Number(s.combo_high || 1).toFixed(1)}x</div>
+    </div>
+    <div class="run-stat-card" title="Longest consecutive perfect-bite chain in this run">
+      <div class="run-stat-label" title="Longest consecutive perfect-bite chain in this run">Perfect Chain</div>
+      <div class="run-stat-value">${Math.floor(s.best_perfect_chain || 0)}</div>
+    </div>
+    <div class="run-stat-card" title="Perfect accuracy = perfect bites / scored bites">
+      <div class="run-stat-label" title="Perfect accuracy = perfect bites / scored bites">Perfect %</div>
+      <div class="run-stat-value">${perfectPct.toFixed(2)}%</div>
+    </div>
+    <div class="run-stat-card" title="How many times Venom Rush activated this run">
+      <div class="run-stat-label" title="How many times Venom Rush activated this run">Venom Rush</div>
+      <div class="run-stat-value">${Math.floor(s.venom_rush_procs || 0)}</div>
+    </div>
+    <div class="run-stat-card" title="Golden Ouroboros catches this run">
+      <div class="run-stat-label" title="Golden Ouroboros catches this run">Goldens</div>
+      <div class="run-stat-value">${Math.floor(s.golden_caught || 0)}</div>
+    </div>
+    <div class="run-stat-card" title="Debuffs applied to you this run">
+      <div class="run-stat-label" title="Debuffs applied to you this run">Debuffs</div>
+      <div class="run-stat-value">${Math.floor(s.debuffs_triggered || 0)}</div>
+    </div>
+  `;
 }
 
 function renderAscensionBadge() {
@@ -793,10 +1341,13 @@ function showBiteFeedback(result) {
   clearTimeout(feedbackTimer);
   clearTimeout(feedbackFadeTimer);
   const labels = {
-    perfect: '✦ PERFECT BITE ✦',
-    good:    'GOOD BITE',
-    miss:    'CHOMP — MISS!',
-    saved:   '★ COMBO SAVED! ★',
+    perfect:     '✦ PERFECT BITE ✦',
+    good:        'GOOD BITE',
+    'auto-good': '⟳ AUTO BITE',
+    honed:       '✦ HONED BITE ✦',
+    miss:        'CHOMP — MISS!',
+    'idle-miss': 'Rhythm slipping…',
+    saved:       '★ COMBO SAVED! ★',
   };
   dom.feedback.textContent = labels[result] || '';
   dom.feedback.className   = `feedback fb-${result}`;
@@ -809,12 +1360,43 @@ function showBiteFeedback(result) {
   }, FEEDBACK_DURATION);
 }
 
+function maybeShowIdleMissFeedback(state, comboBeforeDecay) {
+  if (!state) return;
+  if (comboBeforeDecay <= 1.0) {
+    _lastIdleMissVisualBeat = -1;
+    return;
+  }
+  if (state.frenzy_active) return;
+
+  const beatInterval  = 60.0 / Math.max(getCurrentBpm(state), 1);
+  const timingWindow  = getTimingWindowS(state);
+  const t             = now();
+
+  // Only visualize true idle misses (no recent press).
+  if (t - state.last_press_time < beatInterval * 0.9) return;
+
+  const elapsed           = t - state.beat_origin;
+  const currentBeatIndex  = Math.floor(elapsed / beatInterval);
+  if (currentBeatIndex <= state.last_scored_beat_index) return;
+  if (currentBeatIndex === _lastIdleMissVisualBeat) return;
+
+  // Wait until the timing window for this beat has fully closed before
+  // declaring a miss — otherwise we fire in the middle of the hit zone.
+  const beatPos = elapsed - currentBeatIndex * beatInterval;
+  if (beatPos < timingWindow) return;
+
+  _lastIdleMissVisualBeat = currentBeatIndex;
+  state.perfect_streak = 0;  // missed beat — break perfect streak immediately
+  showBiteFeedback('idle-miss');
+}
+
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
 
 function doFeed() {
   if (!state) return;
+  if (_shedAnim) return;  // block biting during shed animation
 
   // DO NOT resample here. _beatCache.t was set by the most recent renderRhythm()
   // rAF call — that is the exact timestamp used to draw the cursor pixel the
@@ -854,16 +1436,13 @@ function buyUpgrade(index) {
 }
 
 function doShed() {
+  if (_shedAnim) return;                   // already animating
   if (!state || !canShed(state)) {
     showToast('Not ready to shed — grow more!', 'error');
     return;
   }
-  const scalesEarned = performShed(state);
-  const stageName    = _growthStage(state);
-  showToast(`🐍 Shed Skin → ${stageName}! +${Math.floor(scalesEarned)} Scales`, 'warning');
-  refreshOfferings(state, getUnlockedUpgradeSet(meta));
-  computeDerived(state);
-  renderAll();
+  // Start the visual animation; performShed is called at the end of renderSnake
+  _startShedAnim(state);
 }
 
 function catchGolden() {
@@ -893,21 +1472,14 @@ function acceptEcho() {
   }
 }
 
-function acceptArchetypeOffer() {
-  if (!state || !state.archetype_offer_id) return;
-  const arch = ALL_ARCHETYPES[state.archetype_offer_id];
-  const ok   = acceptArchetype(state);
-  if (ok && arch) {
-    computeDerived(state);
-    refreshOfferings(state, getUnlockedUpgradeSet(meta));
-    showToast(`⚔ You are ${arch.name}! ${arch.description}`, 'success');
-    renderAll();
-    saveRun(state, events);
-  }
-}
+
 
 function doSave() {
   if (!state) return;
+  if (_saveEpoch !== getSaveEpoch()) {
+    showToast('Save blocked: another tab/session reset save data. Reload this tab.', 'error');
+    return;
+  }
   saveRun(state, events);
   saveMeta(meta);
   const knowledge = computeKnowledgeReward(state.stats);
@@ -930,8 +1502,8 @@ function doClearSave() {
 }
 
 function confirmClearSave() {
-  deleteRun();
-  deleteMeta();
+  rotateSaveEpoch();
+  purgeAllSaveData();
   closeSettings();
   location.reload();
 }
@@ -1030,8 +1602,8 @@ function confirmAscension() {
   // Archetypes are now earned through playstyle, not assigned at random.
   // Clear everything — player will awaken a new archetype by playing naturally.
   state.archetype_id          = '';
-  state.archetype_offer_id    = '';
-  state.archetype_offer_expires = 0.0;
+  state.archetype_switch_available_at = 0.0;
+  state.notified_unlocks      = [];
   state.debuff_id             = '';
   state.debuff_end_time       = 0.0;
   state.resonance_perfects    = 0;
@@ -1058,6 +1630,11 @@ document.addEventListener('keydown', (e) => {
 
   if (!dom.ascensionModal.classList.contains('hidden')) {
     if (e.key === 'Escape') closeAscensionModal();
+    return;
+  }
+
+  if (_welcomeModal && !_welcomeModal.classList.contains('hidden')) {
+    if (e.key === 'Escape') closeWelcome();
     return;
   }
 
@@ -1094,11 +1671,13 @@ document.addEventListener('keydown', (e) => {
     case 'KeyG': catchGolden();        break;
     case 'KeyB': acceptBargain();      break;
     case 'KeyE': acceptEcho();            break;
-    case 'KeyT': acceptArchetypeOffer();   break;
+    case 'KeyZ': selectArchetype('coiled_striker');    break;
+    case 'KeyX': selectArchetype('rhythm_incarnate');  break;
+    case 'KeyC': selectArchetype('patient_ouroboros'); break;
   }
 });
 
-dom.biteBtn.addEventListener('click', (e) => { e.preventDefault(); doFeed(); });
+dom.biteBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); doFeed(); });
 dom.shedBtn.addEventListener('click', doShed);
 dom.ascendBtn.addEventListener('click', openAscensionModal);
 dom.saveBtn.addEventListener('click', doSave);
@@ -1112,6 +1691,25 @@ if (dom.settingsModal) {
 if (dom.clearSaveBtn)    dom.clearSaveBtn.addEventListener('click', doClearSave);
 if (dom.clearConfirmYes) dom.clearConfirmYes.addEventListener('click', confirmClearSave);
 if (dom.clearConfirmNo)  dom.clearConfirmNo.addEventListener('click', () => { _resetClearSaveUI(); });
+if (dom.autoSaveToggle) {
+  dom.autoSaveToggle.addEventListener('change', () => {
+    if (!meta) return;
+    meta.auto_save_enabled = !!dom.autoSaveToggle.checked;
+    saveMeta(meta);
+    showToast(`Auto-save ${meta.auto_save_enabled ? 'enabled' : 'disabled'}.`, 'info');
+  });
+}
+if (dom.showWelcomeToggle) {
+  dom.showWelcomeToggle.addEventListener('change', () => {
+    if (!meta) return;
+    meta.show_welcome_modal = !!dom.showWelcomeToggle.checked;
+    saveMeta(meta);
+    if (!meta.show_welcome_modal && _welcomeModal && !_welcomeModal.classList.contains('hidden')) {
+      closeWelcome();
+    }
+    showToast(`Welcome modal ${meta.show_welcome_modal ? 'enabled' : 'hidden'}.`, 'info');
+  });
+}
 
 // Upgrade cards — event delegation so dynamically rendered cards are always clickable
 dom.upgradeList.addEventListener('click', (e) => {
@@ -1157,7 +1755,7 @@ const GUIDE_TABS = {
       </table>
 
       <h3>Venom Rush</h3>
-      <p>Land <strong>5 perfect bites in a row</strong> (3 with the Rhythm Incarnate archetype) to trigger Venom Rush — a short burst that grants bonus Essence on every beat.</p>
+      <p>Land <strong>15 perfect bites in a row</strong> (10 with the Rhythm Incarnate archetype) to trigger Venom Rush — a short burst that grants bonus Essence on every beat.</p>
 
       <h3>Tempo</h3>
       <p>The game starts each stage at <strong>60 BPM</strong> and ramps upward in <strong>10 BPM steps</strong> as you approach the next Shed Skin threshold, reaching up to <strong>120 BPM</strong> (higher with Ascension upgrades) right before you shed. After shedding, the tempo resets back to 60 BPM for the new stage. Catching a Golden Ouroboros temporarily spikes the BPM to maximum, which then gradually cools back down to your natural tempo.</p>
@@ -1175,7 +1773,6 @@ const GUIDE_TABS = {
         <tr><td><span class="keybind-hint">G</span></td><td>Catch Golden Ouroboros</td></tr>
         <tr><td><span class="keybind-hint">B</span></td><td>Accept Serpent's Bargain</td></tr>
         <tr><td><span class="keybind-hint">E</span></td><td>Accept Ancient Echo</td></tr>
-        <tr><td><span class="keybind-hint">T</span></td><td>Transform (accept archetype offer)</td></tr>
       </table>
     `;
   },
@@ -1249,33 +1846,33 @@ const GUIDE_TABS = {
   archetypes: function() {
     return `
       <h3>Archetypes</h3>
-      <p>Archetypes are <strong>playstyle identities</strong> that you earn through your actions during a run. Each one modifies your stats in a unique way and grants free starting upgrades. You begin every run with no archetype — your playstyle unlocks them naturally.</p>
-      <p>When an archetype awakens, a purple banner appears. Press <span class="keybind-hint">T</span> within 25 seconds to accept the transformation. You can only hold one archetype at a time; accepting a new one replaces the old.</p>
+      <p>Archetypes are <strong>permanent playstyle identities</strong> that you unlock by demonstrating the right behaviour during any run. Once unlocked, an archetype is yours forever across all runs — select it freely from the Archetype panel on the left using its key or by clicking.</p>
+      <p><strong>Switching carries a 15-minute cooldown.</strong> You begin each run with no archetype active. Choose deliberately — you cannot swap again until the cooldown expires.</p>
 
       <div class="guide-item">
-        <div class="guide-item-name">Rhythm Incarnate</div>
+        <div class="guide-item-name">Rhythm Incarnate <span style="font-weight:400;color:var(--text-dim)">— press X</span></div>
         <div class="guide-item-desc">
           <strong>"You are the beat."</strong><br>
-          <em>Earned by landing 8 consecutive perfect bites.</em><br>
-          The perfect timing zone is 40% wider, and Venom Rush only needs 3 perfects instead of 5. No starting upgrades — pure mastery rewards.
+          <em>Unlock: land 15 consecutive perfect bites in a single run.</em><br>
+          The perfect timing zone is 40% wider, and Venom Rush triggers after only 10 perfects instead of 15. Pure mastery rewards.
         </div>
       </div>
 
       <div class="guide-item">
-        <div class="guide-item-name">Coiled Striker</div>
+        <div class="guide-item-name">Coiled Striker <span style="font-weight:400;color:var(--text-dim)">— press Z</span></div>
         <div class="guide-item-desc">
           <strong>"Strike fast. Strike hard."</strong><br>
-          <em>Earned by sustaining a 5x combo (60+ hits) for 15 unbroken seconds.</em><br>
-          Essence per press is boosted by 25%, and every combo tier grants an extra +1.0x bonus multiplier. The tradeoff: your timing window is 20% tighter and idle income is halved. A high-risk, high-reward identity for aggressive players.
+          <em>Unlock: sustain a 5.0x combo (60+ hits) for 15 unbroken seconds.</em><br>
+          +25% Essence per press, every combo tier grants an extra +1.0x bonus. Trade-off: timing window is 20% tighter and idle income is halved.
         </div>
       </div>
 
       <div class="guide-item">
-        <div class="guide-item-name">Patient Ouroboros</div>
+        <div class="guide-item-name">Patient Ouroboros <span style="font-weight:400;color:var(--text-dim)">— press C</span></div>
         <div class="guide-item-desc">
           <strong>"The coil tightens while you rest."</strong><br>
-          <em>Earned by accumulating 45 seconds of idle time.</em><br>
-          Idle income is multiplied by 2.5x and you become completely immune to all debuffs. The tradeoff: active Essence per press is reduced by 20% and combo builds at half speed.
+          <em>Unlock: accumulate 45 seconds of idle time in a single run.</em><br>
+          Idle income ×2.5, full debuff immunity. Trade-off: active Essence per press −20%, combo builds at half speed.
         </div>
       </div>
     `;
@@ -1352,6 +1949,12 @@ const GUIDE_TABS = {
 
 function openSettings() {
   if (!dom.settingsModal) return;
+  if (dom.autoSaveToggle) {
+    dom.autoSaveToggle.checked = (meta?.auto_save_enabled !== false);
+  }
+  if (dom.showWelcomeToggle) {
+    dom.showWelcomeToggle.checked = (meta?.show_welcome_modal !== false);
+  }
   dom.settingsModal.classList.remove('hidden');
 }
 
@@ -1384,6 +1987,40 @@ function setGuideTab(tabId) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Welcome Modal
+// ---------------------------------------------------------------------------
+
+const _welcomeModal     = $('#welcome-modal');
+const _welcomeCloseBtn  = $('#btn-welcome-close');
+const _welcomeHideToggle = $('#welcome-hide-toggle');
+
+function openWelcome() {
+  if (_welcomeHideToggle) {
+    _welcomeHideToggle.checked = (meta?.show_welcome_modal === false);
+  }
+  if (_welcomeModal) _welcomeModal.classList.remove('hidden');
+}
+
+function closeWelcome() {
+  if (_welcomeModal) _welcomeModal.classList.add('hidden');
+}
+
+if (_welcomeCloseBtn) _welcomeCloseBtn.addEventListener('click', closeWelcome);
+if (_welcomeHideToggle) {
+  _welcomeHideToggle.addEventListener('change', () => {
+    if (!meta) return;
+    meta.show_welcome_modal = !_welcomeHideToggle.checked;
+    saveMeta(meta);
+    if (dom.showWelcomeToggle) dom.showWelcomeToggle.checked = (meta.show_welcome_modal !== false);
+  });
+}
+if (_welcomeModal) {
+  _welcomeModal.addEventListener('click', (e) => {
+    if (e.target === _welcomeModal) closeWelcome();
+  });
+}
+
 if (dom.guideBtn) dom.guideBtn.addEventListener('click', () => openGuide());
 if (dom.guideCloseBtn) dom.guideCloseBtn.addEventListener('click', closeGuide);
 if (dom.guideModal) {
@@ -1411,12 +2048,16 @@ function gameTick() {
   // Re-anchor beat_origin first so all tick functions use updated phase.
   _maybeReanchorBeat();
 
+  const comboBeforeDecay = state.combo_multiplier;
+
   tickMouth(state);
   tickVenomRush(state);
   tickComboDecay(state);
+  maybeShowIdleMissFeedback(state, comboBeforeDecay);
   tickDebuff(state);
   const archetypeNotif = tickArchetypeResonance(state, dt);
   tickPostFrenzyBpm(state);
+  tickRollingBpmDecay(state);
 
   const autoResult = tickAutoBite(state);
   if (autoResult) {
@@ -1457,7 +2098,11 @@ function gameTick() {
 // ---------------------------------------------------------------------------
 
 function renderLoop() {
-  if (state) renderRhythm();
+  if (state) {
+    renderRhythm();
+    // Drive shed animation at full frame rate
+    if (_shedAnim) renderSnake();
+  }
   requestAnimationFrame(renderLoop);
 }
 
@@ -1472,7 +2117,8 @@ function gameTickAndRender() {
 // ---------------------------------------------------------------------------
 
 setInterval(() => {
-  if (state) {
+  if (state && meta?.auto_save_enabled !== false) {
+    if (_saveEpoch !== getSaveEpoch()) return;
     saveRun(state, events);
     saveMeta(meta);
   }
@@ -1483,6 +2129,7 @@ setInterval(() => {
 // ---------------------------------------------------------------------------
 
 (function init() {
+  _saveEpoch = getSaveEpoch();
   meta = loadMeta();
 
   const savedState = loadRun();
@@ -1512,5 +2159,13 @@ setInterval(() => {
   requestAnimationFrame(renderLoop);
 
   renderAll();
+
+  // Show welcome modal whenever player is on first ascension and still early-stage
+  if (meta.show_welcome_modal !== false
+      && meta.ascension_count === 0
+      && state.current_stage_index <= 1) {
+    openWelcome();
+}
+
   console.log('🐍 Ouro — serverless client-side engine running!');
 })();
