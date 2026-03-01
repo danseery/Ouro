@@ -386,6 +386,8 @@ function renderHUD() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STAGE_ICONS = ['🥚','🐍','🦎','🗺️','🏛️','🌍','🌎','⭐','🌌','🔮'];
+// Enabled only when URL contains ?dev — never active on the production URL
+const DEV_MODE = new URLSearchParams(window.location.search).has('dev');
 // Preload stage icon images (PNG, tinted at render time)
 const _stageImgs = Array.from({length: 10}, (_, i) => {
   const img = new Image();
@@ -396,7 +398,7 @@ const _stageImgs = Array.from({length: 10}, (_, i) => {
 function _drawStageIcon(ctx, stageIdx, cx, cy, size, col) {
   const img = _stageImgs[stageIdx];
   if (img && img.complete && img.naturalWidth) {
-    // Draw PNG onto offscreen canvas, then tint via source-in composite
+    // Draw PNG onto offscreen canvas, then tint via source-in composite.
     const off = document.createElement('canvas');
     off.width = off.height = size;
     const octx = off.getContext('2d');
@@ -405,7 +407,8 @@ function _drawStageIcon(ctx, stageIdx, cx, cy, size, col) {
     octx.fillStyle = col;
     octx.fillRect(0, 0, size, size);
     ctx.globalAlpha = 0.85;
-    ctx.drawImage(off, cx - size / 2, cy - size / 2);
+    // Snap to integer pixel to prevent sub-pixel interpolation artefacts
+    ctx.drawImage(off, Math.round(cx - size / 2), Math.round(cy - size / 2));
     ctx.globalAlpha = 1.0;
   } else {
     // Fallback to emoji while image loads
@@ -544,7 +547,7 @@ function _drawShedAnim(ctx, W, H, cx, cy, ringR, t) {
     ctx.fill();
 
     // Center icon (next stage)
-    const iconSize = Math.round(ringR * 0.60);
+    const iconSize = Math.round(ringR * 1.40);
     ctx.shadowBlur    = 0;
     ctx.textAlign     = 'center';
     ctx.textBaseline  = 'middle';
@@ -722,7 +725,7 @@ function renderSnake() {
   ctx.beginPath(); ctx.arc(ex, ey, eyeR * 0.42, 0, Math.PI * 2); ctx.fill();
 
   // ── Center stage icon ─────────────────────────────────────────────────────
-  const iconSize = Math.round(ringR * 0.62);
+  const iconSize = Math.round(ringR * 1.40);
   ctx.textAlign     = 'center';
   ctx.textBaseline  = 'middle';
   _drawStageIcon(ctx, stageIdx, cx, cy, iconSize, col);
@@ -1475,6 +1478,33 @@ function confirmAscension() {
 // Input Handling
 // ---------------------------------------------------------------------------
 
+// ── DEV: stage skip (Shift+] next / Shift+[ prev) — only active with ?dev ──
+function devSetStage(targetIdx) {
+  if (!state || !DEV_MODE) return;
+  const stages = BALANCE.prestige.growth_stages;
+  targetIdx = Math.max(0, Math.min(targetIdx, stages.length - 1));
+  state.current_stage_index = targetIdx;
+  // Set length to threshold + 10% so the shed bar isn't immediately full
+  const threshold = stages[targetIdx][0];
+  state.snake_length        = Math.max(3, Math.floor(threshold * 1.10));
+  state.essence             = state.snake_length * BALANCE.economy.essence_per_length;
+  state.stage_essence_earned = state.essence;
+  state.combo_hits          = 0;
+  state.combo_misses        = 0;
+  state.combo_multiplier    = 1.0;
+  state.last_press_time     = 0.0;
+  state.last_scored_beat_index      = -1;
+  state.last_auto_bite_beat_index   = -1;
+  state.frenzy_active       = false;
+  state.venom_rush_active   = false;
+  _shedAnim                 = null;   // cancel any in-progress shed animation
+  computeDerived(state);
+  refreshOfferings(state, getUnlockedUpgradeSet(meta));
+  renderAll();
+  const stageName = _growthStage(state);
+  showToast(`⚡ DEV → Stage ${targetIdx}: ${stageName}`, 'warning');
+}
+
 document.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
@@ -1524,6 +1554,9 @@ document.addEventListener('keydown', (e) => {
     case 'KeyZ': selectArchetype('coiled_striker');    break;
     case 'KeyX': selectArchetype('rhythm_incarnate');  break;
     case 'KeyC': selectArchetype('patient_ouroboros'); break;
+    // DEV stage skip (only with ?dev in URL)
+    case 'BracketRight': if (DEV_MODE && e.shiftKey && state) devSetStage((state.current_stage_index || 0) + 1); break;
+    case 'BracketLeft':  if (DEV_MODE && e.shiftKey && state) devSetStage((state.current_stage_index || 0) - 1); break;
   }
 });
 
