@@ -20,6 +20,7 @@ hash_style=$(sha256sum  "$SRC/style.css"  | cut -c1-8)
 cp "$SRC/engine.js"  "$DEST/engine.${hash_engine}.js"
 cp "$SRC/game.js"    "$DEST/game.${hash_game}.js"
 cp "$SRC/style.css"  "$DEST/style.${hash_style}.css"
+cp -r "$SRC/icons"   "$DEST/icons"
 
 # Rewrite index.html to reference hashed filenames
 sed \
