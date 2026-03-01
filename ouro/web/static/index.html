@@ -39,18 +39,18 @@
     <main id="game-container">
         <!-- LEFT PANEL: HUD -->
         <section id="hud-panel" class="panel">
-            <div class="panel-header">Stats</div>
+            <div class="panel-header" title="Live run status and current resources">Status</div>
             <div class="stat-group">
                 <div class="stat">
-                    <span class="stat-label">Essence</span>
+                    <span class="stat-label" title="Current spendable resource used for upgrades">Essence</span>
                     <span id="hud-essence" class="stat-value essence-glow">0</span>
                 </div>
                 <div class="stat">
-                    <span class="stat-label">Per Press</span>
+                    <span class="stat-label" title="Essence gained per successful manual bite before temporary event rewards">Per Press</span>
                     <span id="hud-per-press" class="stat-value">1</span>
                 </div>
                 <div class="stat">
-                    <span class="stat-label">Idle Income</span>
+                    <span class="stat-label" title="Passive Essence gained each second while waiting">Idle Income</span>
                     <span id="hud-idle" class="stat-value">0/s</span>
                 </div>
             </div>
@@ -59,15 +59,11 @@
 
             <div class="stat-group">
                 <div class="stat">
-                    <span class="stat-label">Length</span>
-                    <span id="hud-length" class="stat-value length-glow">3</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-label">Stage</span>
+                    <span class="stat-label" title="Current growth stage; fill shed progress to advance">Stage</span>
                     <span id="hud-stage" class="stat-value">Hatchling</span>
                 </div>
                 <div class="stat">
-                    <span class="stat-label">Scales</span>
+                    <span class="stat-label" title="Permanent prestige currency kept across runs">Scales</span>
                     <span id="hud-scales" class="stat-value scales-glow">0</span>
                 </div>
             </div>
@@ -76,33 +72,20 @@
 
             <div class="stat-group">
                 <div class="stat">
-                    <span class="stat-label">Combo</span>
+                    <span class="stat-label" title="Current combo multiplier affecting Essence gains">Combo</span>
                     <span id="hud-combo" class="stat-value combo-glow">1.0x</span>
                 </div>
                 <div class="stat">
-                    <span class="stat-label">Hits</span>
+                    <span class="stat-label" title="Current consecutive successful hits in this combo chain">Hits</span>
                     <span id="hud-hits" class="stat-value">0</span>
                 </div>
             </div>
 
             <div class="divider"></div>
 
-            <!-- Goal -->
-            <div class="goal-container">
-                <span id="hud-goal-text" class="goal-text">Feed to grow...</span>
-                <div class="progress-bar">
-                    <div id="hud-goal-bar" class="progress-fill" style="width: 0%"></div>
-                </div>
-                <span id="hud-goal-pct" class="goal-pct">0%</span>
-            </div>
-
-            <div class="divider"></div>
-
-            <!-- Archetype & Curse -->
-            <div class="meta-info">
-                <div id="hud-archetype" class="archetype-info"></div>
-                <div id="hud-curse" class="curse-info"></div>
-            </div>
+            <!-- Archetype Select -->
+            <div class="panel-subheader">Archetype</div>
+            <div id="archetype-select" class="archetype-select"></div>
 
             <div class="divider"></div>
 
@@ -112,6 +95,7 @@
                 <span class="kb"><kbd id="kb-buy-range">1-3</kbd> Buy</span>
                 <span class="kb"><kbd>S</kbd> Shed</span>
                 <span class="kb"><kbd>A</kbd> Ascend</span>
+                <span class="kb"><kbd>Z/X/C</kbd> Archetype</span>
                 <span class="kb"><kbd>G</kbd> Golden</span>
                 <span class="kb"><kbd>B</kbd> Bargain</span>
                 <span class="kb"><kbd>E</kbd> Echo</span>
@@ -123,7 +107,14 @@
             <!-- Snake Display -->
             <div id="snake-display" class="panel">
                 <canvas id="snake-art" class="snake-art" width="200" height="200"></canvas>
-                <div id="snake-length-label" class="snake-length">Length: 3</div>
+                <div class="snake-length-heading">LENGTH</div>
+                <div id="snake-length-label" class="snake-length">3</div>
+                <div class="shed-bar-wrapper">
+                    <span id="shed-bar-label" class="shed-bar-label">Next: Hatchling</span>
+                    <div class="shed-bar-track">
+                        <div id="shed-bar-fill" class="shed-bar-fill" style="width: 0%"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- Rhythm Indicator -->
@@ -133,7 +124,9 @@
                     <div id="jaw-hint" class="jaw-hint">● wait</div>
                     <pre id="jaw-bottom" class="jaw"></pre>
                 </div>
-                <div id="rhythm-feedback" class="feedback"></div>
+                <div class="feedback-container">
+                    <div id="rhythm-feedback" class="feedback"></div>
+                </div>
                 <div id="rhythm-beat-bar" class="beat-bar-container">
                     <div class="beat-bar-track">
                         <div id="beat-bar-perfect" class="beat-zone perfect-zone"></div>
@@ -142,16 +135,17 @@
                     </div>
                 </div>
                 <div class="rhythm-stats">
-                    <span id="rhythm-bpm" class="rhythm-stat">60 BPM</span>
-                    <span id="rhythm-tap-bpm" class="rhythm-stat dim">— tap</span>
-                    <span id="rhythm-combo" class="rhythm-stat combo-glow">1.0x</span>
-                    <span id="rhythm-hits" class="rhythm-stat dim">0 hits</span>
+                    <span id="rhythm-bpm" class="rhythm-stat" title="Target beat tempo">60 target</span>
+                    <span id="rhythm-tap-bpm" class="rhythm-stat dim" title="Your recent manual tapping rate">— rate</span>
+                    <span id="rhythm-perfect-streak" class="rhythm-stat dim" title="Current consecutive perfect bites">0 perfect</span>
+                    <span id="rhythm-combo-count" class="rhythm-stat dim" title="Current combo chain length">0 combo</span>
+                    <span id="rhythm-combo" class="rhythm-stat combo-glow" title="Current combo multiplier">1.0 mult</span>
                 </div>
-                <div class="rhythm-hint">── bite the tail on the beat ──</div>
+                <div id="rhythm-hint" class="rhythm-hint">── bite the tail on the beat ──</div>
             </div>
 
             <!-- Bite Button -->
-            <button id="bite-button" class="bite-btn">
+            <button id="bite-button" class="bite-btn" title="Attempt a bite on-beat (Space or click)">
                 <span class="bite-icon">🐍</span>
                 <span class="bite-label">BITE</span>
                 <span class="bite-sub">Space / Click</span>
@@ -161,13 +155,14 @@
             <div id="prestige-panel" class="panel prestige-panel">
                 <div id="prestige-content"></div>
                 <div class="prestige-buttons">
-                    <button id="btn-shed" class="action-btn shed-btn" disabled>
+                    <button id="btn-shed" class="action-btn shed-btn" disabled title="Reset stage progress to gain Scales and advance to the next stage">
                         <span class="btn-key">S</span> Shed Skin
                     </button>
-                    <button id="btn-ascend" class="action-btn ascend-btn" disabled>
+                    <button id="btn-ascend" class="action-btn ascend-btn" disabled title="Full run reset for permanent ascension progression">
                         <span class="btn-key">A</span> Ascend
                     </button>
                 </div>
+                <div id="run-stats" class="run-stats"></div>
             </div>
         </section>
 
@@ -179,6 +174,59 @@
             </div>
         </section>
     </main>
+
+    <!-- ═══ WELCOME MODAL ═══ -->
+    <div id="welcome-modal" class="modal-overlay hidden">
+        <div class="modal welcome-modal">
+            <div class="welcome-snake-glyph">🐍</div>
+            <h2 class="welcome-title">You Are the Ouroboros</h2>
+            <p class="welcome-flavor">An ancient hunger stirs. Your tail calls to your jaws across the void of time. You are a Snakelet — small, new, and endlessly hungry. Bite. Grow. Shed. Repeat. The serpent devours itself so that it may become infinite.</p>
+
+            <div class="welcome-divider"></div>
+
+            <div class="welcome-steps">
+                <div class="welcome-step">
+                    <div class="welcome-step-icon" style="color:var(--cyan)">◎</div>
+                    <div class="welcome-step-body">
+                        <div class="welcome-step-title">Bite the Beat</div>
+                        <div class="welcome-step-desc">Press <kbd>Space</kbd> or tap the <strong>BITE</strong> button in time with the sweeping cursor. Land in the glowing zone for a <strong>Perfect</strong> or the wider area for a <strong>Good</strong>. Missing breaks your rhythm.</div>
+                    </div>
+                </div>
+                <div class="welcome-step">
+                    <div class="welcome-step-icon" style="color:var(--purple)">⟳</div>
+                    <div class="welcome-step-body">
+                        <div class="welcome-step-title">Build Your Combo</div>
+                        <div class="welcome-step-desc">Consecutive hits stack a <strong>Combo Multiplier</strong> that amplifies all Essence earned — the longer the streak, the higher it climbs. Two misses in a row will shatter it entirely. Don't let the pattern slip.</div>
+                    </div>
+                </div>
+                <div class="welcome-step">
+                    <div class="welcome-step-icon" style="color:var(--yellow)">◈</div>
+                    <div class="welcome-step-body">
+                        <div class="welcome-step-title">Grow &amp; Shed</div>
+                        <div class="welcome-step-desc">As you grow, the progress bar below your serpent fills. When it's full you can <strong>Shed Skin</strong> (<kbd>S</kbd>) to advance to the next stage and earn Scales — permanent currency that carries across runs.</div>
+                    </div>
+                </div>
+                <div class="welcome-step">
+                    <div class="welcome-step-icon" style="color:var(--green)">⬡</div>
+                    <div class="welcome-step-body">
+                        <div class="welcome-step-title">Buy Upgrades</div>
+                        <div class="welcome-step-desc">Spend Essence on the upgrade offerings in the right panel — use the number keys shown on each card. Offerings refresh each time you shed. Upgrades compound — buy early, buy often.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="welcome-divider"></div>
+            <p class="welcome-hint">Open the <strong>📖 Guide</strong> any time from the header for the full manual.</p>
+            <button id="btn-welcome-close" class="welcome-close-btn">Begin Your Coil →</button>
+            <div class="welcome-toggle-row">
+                <label class="pill-toggle">
+                    <input id="welcome-hide-toggle" type="checkbox">
+                    <span class="toggle-track"></span>
+                </label>
+                <span class="welcome-toggle-label">Don't show this modal again</span>
+            </div>
+        </div>
+    </div>
 
     <!-- ═══ ASCENSION MODAL ═══ -->
     <div id="ascension-modal" class="modal-overlay hidden">
@@ -211,7 +259,20 @@
                             <div class="settings-row-label">Auto-save</div>
                             <div class="settings-row-desc">Game saves automatically every 30 seconds.</div>
                         </div>
-                        <span class="settings-value">Enabled</span>
+                        <label class="pill-toggle" title="Enable automatic save every 30 seconds">
+                            <input id="settings-auto-save" type="checkbox" checked>
+                            <span class="toggle-track"></span>
+                        </label>
+                    </div>
+                    <div class="settings-row" style="margin-top:10px;">
+                        <div>
+                            <div class="settings-row-label">Show New Game Modal</div>
+                            <div class="settings-row-desc">Show the onboarding modal when starting a fresh early-stage run.</div>
+                        </div>
+                        <label class="pill-toggle" title="Show or hide the welcome modal on fresh early runs">
+                            <input id="settings-show-welcome" type="checkbox" checked>
+                            <span class="toggle-track"></span>
+                        </label>
                     </div>
                 </div>
                 <div class="settings-section danger-zone">

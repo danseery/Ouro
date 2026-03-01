@@ -29,7 +29,7 @@ const BALANCE = {
     perfect_window_ms: 55.0,
     bite_cooldown_fraction: 0.65,
     feedback_loop_ms_per_level: 1.0,
-    venom_rush_trigger_streak: 5,
+    venom_rush_trigger_streak: 15,
     venom_rush_beats: 3,
     venom_rush_bonus_mult: 2.0,
     idle_escalation_rate: 0.02,
@@ -69,6 +69,9 @@ const BALANCE = {
     challenge_min_interval_s: 120.0,
     challenge_max_interval_s: 240.0,
     challenge_duration_s: 10.0,
+    feed_frenzy_base_bpm: 150.0,
+    feed_frenzy_max_bpm: 500.0,
+    feed_frenzy_step_bpm: 50.0,
     bargain_min_interval_s: 90.0,
     bargain_max_interval_s: 180.0,
     bargain_duration_s: 12.0,
@@ -97,27 +100,31 @@ const UE = {  // UpgradeEffect enum
   MAX_COMBO_MULT_BONUS: 'MAX_COMBO_MULT_BONUS',
   SHED_SCALE_BONUS:     'SHED_SCALE_BONUS',
   COSMIC_INCOME_MULT:   'COSMIC_INCOME_MULT',
-  COMBO_SAVE_CHANCE:    'COMBO_SAVE_CHANCE',
-  AUTO_BITE_CHANCE:     'AUTO_BITE_CHANCE',
-  MULTI_BITE_CHANCE:    'MULTI_BITE_CHANCE',
+  COMBO_SAVE_CHANCE:      'COMBO_SAVE_CHANCE',
+  AUTO_BITE_CHANCE:       'AUTO_BITE_CHANCE',
+  MULTI_BITE_CHANCE:      'MULTI_BITE_CHANCE',
+  IDLE_GOOD_BITE_CHANCE:  'IDLE_GOOD_BITE_CHANCE',   // new: auto-good while idle
+  GOOD_TO_PERFECT_CHANCE: 'GOOD_TO_PERFECT_CHANCE',  // new: upgrade good → perfect
 };
 
 const ALL_UPGRADES = {
-  fang_sharpening:   { id:'fang_sharpening',   name:'Fang Sharpening',    description:'Each press tears deeper. +15% Essence per press per level.',                                          effect:UE.ESSENCE_PER_PRESS,    value_per_level:0.15,   base_cost:100,   max_level:100, tier:0, cosmic_only:false },
-  elastic_scales:    { id:'elastic_scales',     name:'Elastic Scales',     description:'Combo lingers longer. +10% combo decay time per level.',                                              effect:UE.COMBO_DECAY_SLOW,     value_per_level:0.10,   base_cost:200,   max_level:100, tier:0, cosmic_only:false },
-  digestive_enzymes: { id:'digestive_enzymes',  name:'Digestive Enzymes',  description:'Digest even while resting. +15% idle income per level.',                                             effect:UE.IDLE_INCOME_MULT,     value_per_level:0.15,   base_cost:250,  max_level:100, tier:0, cosmic_only:false },
+  fang_sharpening:   { id:'fang_sharpening',   name:'Fang Sharpening',    description:'Each press tears deeper. +15% Essence per press per level.',                                          effect:UE.ESSENCE_PER_PRESS,    value_per_level:0.15,   base_cost:100,   max_level:50, tier:0, cosmic_only:false },
+  elastic_scales:    { id:'elastic_scales',     name:'Elastic Scales',     description:'Combo lingers longer. +10% combo decay time per level.',                                              effect:UE.COMBO_DECAY_SLOW,     value_per_level:0.10,   base_cost:200,   max_level:50, tier:0, cosmic_only:false },
+  digestive_enzymes: { id:'digestive_enzymes',  name:'Digestive Enzymes',  description:'Digest even while resting. +15% idle income per level.',                                             effect:UE.IDLE_INCOME_MULT,     value_per_level:0.15,   base_cost:250,  max_level:50, tier:0, cosmic_only:false },
   rattletail:        { id:'rattletail',          name:'Rattletail',         description:'A lucky rattle. +3% chance of double Essence per press per level.',                                 effect:UE.DOUBLE_PRESS_CHANCE,  value_per_level:0.03,  base_cost:300,   max_level:10,  tier:0, cosmic_only:false },
-  hypnotic_eyes:     { id:'hypnotic_eyes',       name:'Hypnotic Eyes',      description:'Golden events linger in your gaze. +10% duration per level.',                                       effect:UE.GOLDEN_DURATION_MULT, value_per_level:0.10,  base_cost:400,  max_level:20,  tier:0, cosmic_only:false },
-  venomous_bite:     { id:'venomous_bite',       name:'Venomous Bite',      description:'Upgrades dissolve easier. -2% upgrade costs per level.',                                            effect:UE.UPGRADE_COST_DISCOUNT,value_per_level:0.02,  base_cost:500,  max_level:11,  tier:0, cosmic_only:false },
+  hypnotic_eyes:     { id:'hypnotic_eyes',       name:'Hypnotic Eyes',      description:'Golden events linger in your gaze. +10% duration per level.',                                       effect:UE.GOLDEN_DURATION_MULT, value_per_level:0.10,  base_cost:400,  max_level:10,  tier:0, cosmic_only:false },
+  venomous_bite:     { id:'venomous_bite',       name:'Venomous Bite',      description:'Upgrades dissolve easier. -2% upgrade costs per level.',                                            effect:UE.UPGRADE_COST_DISCOUNT,value_per_level:0.02,  base_cost:500,  max_level:10,  tier:0, cosmic_only:false },
   growth_hormone:    { id:'growth_hormone',      name:'Growth Hormone',     description:'Break through combo ceilings. +0.2 max combo tier per level.',                                        effect:UE.MAX_COMBO_MULT_BONUS, value_per_level:0.2,   base_cost:800,  max_level:30,  tier:0, cosmic_only:false },
-  resilient_fangs:   { id:'resilient_fangs',     name:'Resilient Fangs',    description:"The ouroboros refuses to let go. +5% chance a Chomp doesn't break your combo per level.",         effect:UE.COMBO_SAVE_CHANCE,    value_per_level:0.05,  base_cost:400,  max_level:6,   tier:0, cosmic_only:false },
+  resilient_fangs:   { id:'resilient_fangs',     name:'Resilient Fangs',    description:"The ouroboros refuses to let go. +5% chance a Chomp doesn't break your combo per level.",         effect:UE.COMBO_SAVE_CHANCE,    value_per_level:0.05,  base_cost:400,  max_level:10,   tier:0, cosmic_only:false },
   cascading_fangs:   { id:'cascading_fangs',     name:'Cascading Fangs',    description:'One strike births another. Each bite has a cascading chance to strike again — up to 4 times.',    effect:UE.MULTI_BITE_CHANCE,    value_per_level:0.02,  base_cost:600,  max_level:10,  tier:0, cosmic_only:false },
   ancient_wisdom:    { id:'ancient_wisdom',      name:'Ancient Wisdom',     description:'Deeper sheds. +0.2 bonus Scale per shed per level.',                                                  effect:UE.SHED_SCALE_BONUS,     value_per_level:0.2,   base_cost:600,  max_level:50,  tier:1, cosmic_only:false },
-  ouroboros_rhythm:  { id:'ouroboros_rhythm',    name:'Ouroboros Rhythm',   description:'+10% Essence per press, stacks with Fang Sharpening.',                                             effect:UE.ESSENCE_PER_PRESS,    value_per_level:0.10,   base_cost:800,  max_level:75,  tier:1, cosmic_only:false },
+  ouroboros_rhythm:  { id:'ouroboros_rhythm',    name:'Ouroboros Rhythm',   description:'+10% Essence per press, stacks with Fang Sharpening.',                                             effect:UE.ESSENCE_PER_PRESS,    value_per_level:0.10,   base_cost:800,  max_level:50,  tier:1, cosmic_only:false },
   serpent_instinct:  { id:'serpent_instinct',    name:'Serpent Instinct',   description:'The snake bites by reflex. +2% chance of an automatic perfect bite each beat per level.',         effect:UE.AUTO_BITE_CHANCE,     value_per_level:0.02,  base_cost:1000,  max_level:10,  tier:1, cosmic_only:false },
-  stellar_coils:     { id:'stellar_coils',       name:'Stellar Coils',      description:'Stars orbit your coils. +20% cosmic income per level.',                                            effect:UE.COSMIC_INCOME_MULT,   value_per_level:0.2,   base_cost:5000, max_level:100, tier:2, cosmic_only:true  },
-  nebula_nests:      { id:'nebula_nests',        name:'Nebula Nests',       description:'Idle galaxies feed you. +20% idle income per level (cosmic).',                                     effect:UE.IDLE_INCOME_MULT,     value_per_level:0.2,   base_cost:8000, max_level:100, tier:2, cosmic_only:true  },
-  void_shrines:      { id:'void_shrines',        name:'Void Shrines',       description:'+10% Essence per press (cosmic).',                                                                  effect:UE.ESSENCE_PER_PRESS,    value_per_level:0.10,   base_cost:10000, max_level:100, tier:2, cosmic_only:true  },
+  auto_bite:         { id:'auto_bite',            name:'Auto Bite',          description:'The serpent strikes in silence. +1% chance to land an automatic good bite each idle beat.',       effect:UE.IDLE_GOOD_BITE_CHANCE, value_per_level:0.01, base_cost:200,   max_level:40,  tier:0, cosmic_only:false },
+  improved_bite:     { id:'improved_bite',        name:'Honed Bite',         description:'Instinct sharpens each strike. +2% chance to refine a good bite into a perfect bite per level.', effect:UE.GOOD_TO_PERFECT_CHANCE,value_per_level:0.02, base_cost:600,   max_level:50,  tier:0, cosmic_only:false },
+  stellar_coils:     { id:'stellar_coils',       name:'Stellar Coils',      description:'Stars orbit your coils. +20% cosmic income per level.',                                            effect:UE.COSMIC_INCOME_MULT,   value_per_level:0.2,   base_cost:5000, max_level:50, tier:2, cosmic_only:true  },
+  nebula_nests:      { id:'nebula_nests',        name:'Nebula Nests',       description:'Idle galaxies feed you. +20% idle income per level (cosmic).',                                     effect:UE.IDLE_INCOME_MULT,     value_per_level:0.2,   base_cost:8000, max_level:50, tier:2, cosmic_only:true  },
+  void_shrines:      { id:'void_shrines',        name:'Void Shrines',       description:'+10% Essence per press (cosmic).',                                                                  effect:UE.ESSENCE_PER_PRESS,    value_per_level:0.10,   base_cost:10000, max_level:50, tier:2, cosmic_only:true  },
 };
 
 const BASE_POOL   = Object.values(ALL_UPGRADES).filter(u => u.tier === 0).map(u => u.id);
@@ -144,7 +151,7 @@ const ALL_ARCHETYPES = {
   },
   rhythm_incarnate: {
     id:'rhythm_incarnate', name:'Rhythm Incarnate', tagline:'You are the beat.',
-    description:'Pure tempo mastery. No starting upgrades, but the perfect window is 40% wider and Venom Rush triggers after only 3 perfect bites instead of 5.',
+    description:'Pure tempo mastery. The perfect window is 40% wider and Venom Rush triggers after only 10 perfect bites instead of 15.',
     starting_upgrades:{},
     preferred_pool:['fang_sharpening','ouroboros_rhythm','growth_hormone','venomous_bite'],
     epp_mult:1.0, idle_mult:1.0, timing_mult:1.0, combo_tier_bonus:0.0,
@@ -171,6 +178,7 @@ function _applyDebuff(state, debuffId) {
   if (arch && arch.debuff_immune) return false;
   state.debuff_id = debuffId;
   state.debuff_end_time = now() + DEBUFF_DURATION_S;
+  state.stats.debuffs_triggered = (state.stats.debuffs_triggered || 0) + 1;
   return true;
 }
 
@@ -186,30 +194,20 @@ function tickDebuff(state) {
 // ARCHETYPE RESONANCE  (earned through playstyle, not assigned at random)
 // ─────────────────────────────────────────────────────────────────
 // Thresholds:
-//   Rhythm Incarnate  — 8 consecutive perfect bites (no misses or goods in between)
+//   Rhythm Incarnate  — 15 consecutive perfect bites (no misses or goods in between)
 //   Coiled Striker    — sustain 5.0x combo (60+ hits) for 15 unbroken seconds
 //   Patient Ouroboros — accumulate 45 idle seconds in the run
 
-const ARCHETYPE_OFFER_DURATION_S = 25.0;
+const ARCHETYPE_SWITCH_COOLDOWN_S = 15 * 60;  // 15-minute cooldown between switches
 const PEAK_COMBO_HITS    = 60;  // 5.0x tier threshold
 const PATIENCE_THRESHOLD = 45;  // idle seconds
-const PERFECTS_THRESHOLD = 8;   // consecutive perfect bites
+const PERFECTS_THRESHOLD = 15;   // consecutive perfect bites
 const PEAK_COMBO_SECS    = 15;  // seconds sustained at peak
 
+// Checks resonance conditions and fires a one-shot `archetype_unlocked:id`
+// notification the first time each condition is met within a run.
+// The actual unlock (written to meta) is handled in game.js processNotifications.
 function tickArchetypeResonance(state, dt) {
-  const t = now();
-
-  // Expire a pending offer
-  if (state.archetype_offer_id && t >= state.archetype_offer_expires) {
-    const expired = state.archetype_offer_id;
-    state.archetype_offer_id = '';
-    state.archetype_offer_expires = 0.0;
-    return `archetype_offer_expired:${expired}`;
-  }
-
-  // Don’t generate a new offer while one is already pending
-  if (state.archetype_offer_id) return null;
-
   // Update combo_peak_seconds: must be SUSTAINED, resets if combo drops
   if (state.combo_hits >= PEAK_COMBO_HITS) {
     state.combo_peak_seconds += dt;
@@ -217,51 +215,27 @@ function tickArchetypeResonance(state, dt) {
     state.combo_peak_seconds = 0.0;
   }
 
-  // Check conditions — never offer the currently active archetype
+  const fired = state.notified_unlocks;
+
   if (state.resonance_perfects >= PERFECTS_THRESHOLD
-      && state.archetype_id !== 'rhythm_incarnate') {
-    state.archetype_offer_id = 'rhythm_incarnate';
-    state.archetype_offer_expires = t + ARCHETYPE_OFFER_DURATION_S;
-    return 'archetype_awakened:rhythm_incarnate';
+      && !fired.includes('rhythm_incarnate')) {
+    fired.push('rhythm_incarnate');
+    return 'archetype_unlocked:rhythm_incarnate';
   }
   if (state.combo_peak_seconds >= PEAK_COMBO_SECS
-      && state.archetype_id !== 'coiled_striker') {
-    state.archetype_offer_id = 'coiled_striker';
-    state.archetype_offer_expires = t + ARCHETYPE_OFFER_DURATION_S;
+      && !fired.includes('coiled_striker')) {
+    fired.push('coiled_striker');
     state.combo_peak_seconds = 0.0;
-    return 'archetype_awakened:coiled_striker';
+    return 'archetype_unlocked:coiled_striker';
   }
   if (state.idle_seconds >= PATIENCE_THRESHOLD
-      && state.archetype_id !== 'patient_ouroboros') {
-    state.archetype_offer_id = 'patient_ouroboros';
-    state.archetype_offer_expires = t + ARCHETYPE_OFFER_DURATION_S;
-    state.idle_seconds = 0.0; // reset so we don’t immediately re-trigger
-    return 'archetype_awakened:patient_ouroboros';
+      && !fired.includes('patient_ouroboros')) {
+    fired.push('patient_ouroboros');
+    state.idle_seconds = 0.0;
+    return 'archetype_unlocked:patient_ouroboros';
   }
 
   return null;
-}
-
-// Accept the pending archetype offer: apply bonuses, reset counters.
-function acceptArchetype(state) {
-  const id = state.archetype_offer_id;
-  if (!id) return false;
-  const arch = ALL_ARCHETYPES[id];
-  if (!arch) return false;
-
-  state.archetype_id = id;
-  state.archetype_offer_id = '';
-  state.archetype_offer_expires = 0.0;
-  state.combo_peak_seconds = 0.0;
-  state.resonance_perfects = 0;
-
-  // Gift the archetype’s starting upgrades as a free bonus (+1 per key)
-  for (const [uid, giftLevel] of Object.entries(arch.starting_upgrades)) {
-    const current = state.upgrade_levels[uid] || 0;
-    const udef = ALL_UPGRADES[uid];
-    if (udef) state.upgrade_levels[uid] = Math.min(current + giftLevel, udef.max_level);
-  }
-  return true;
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -301,6 +275,11 @@ function newRunStats(overrides = {}) {
     total_presses: 0,
     sheds: 0,
     combo_high: 1.0,
+    best_perfect_chain: 0,
+    perfect_bites: 0,
+    scored_bites: 0,
+    venom_rush_procs: 0,
+    debuffs_triggered: 0,
     golden_caught: 0,
     golden_missed: 0,
     challenges_completed: 0,
@@ -323,13 +302,14 @@ function newGameState(overrides = {}) {
     debuff_end_time: 0.0,  // epoch when debuff expires
     miss_streak: 0,        // consecutive out-of-window presses
     resonance_perfects: 0, // consecutive perfects (doesn’t reset on Venom Rush)
-    combo_peak_seconds: 0.0,    // sustained seconds at 5.0x+ combo
-    archetype_offer_id: '',     // archetype currently being offered
-    archetype_offer_expires: 0.0,
+    combo_peak_seconds: 0.0,         // sustained seconds at 5.0x+ combo
+    notified_unlocks: [],             // archetype ids whose unlock notification has fired this run
+    archetype_switch_available_at: 0.0, // epoch when next switch is allowed (15-min cooldown)
     combo_hits: 0,
     combo_multiplier: 1.0,
     combo_misses: 0,
     last_press_time: 0.0,
+    last_manual_press_time: 0.0,
     press_timestamps: [],      // ring buffer of last 10 press times for rolling BPM
     rolling_bpm: 0.0,          // avg BPM over last 10 presses
     beat_origin: t,
@@ -360,6 +340,7 @@ function newGameState(overrides = {}) {
     idle_income_per_s: 0.0,
     post_frenzy_bpm: 0.0,
     post_frenzy_next_step: 0.0,
+    stage_essence_earned: 0.0,  // per-stage accumulator; never reduced by purchases
     stats: newRunStats(),
   }, overrides);
 }
@@ -370,6 +351,7 @@ function newMetaState(overrides = {}) {
     starting_length_bonus: 0,
     unlocked_upgrade_ids: [],
     unlocked_event_types: [],
+    unlocked_archetypes: [],
     ascension_count: 0,
     ascension_upgrade_levels: {},
     unlocked_skins: ['emerald'],
@@ -380,6 +362,8 @@ function newMetaState(overrides = {}) {
     best_total_essence: 0.0,
     total_golden_caught: 0,
     total_challenges_completed: 0,
+    auto_save_enabled: true,
+    show_welcome_modal: true,
   }, overrides);
 }
 
@@ -406,6 +390,11 @@ function applyAscensionStartingBonuses(meta, state) {
       const bonus = Math.floor(udef.value_per_level * level);
       state.snake_length = Math.max(state.snake_length, 3) + bonus;
       state.essence = Math.max(state.essence, state.snake_length * BALANCE.economy.essence_per_length);
+      // Keep stage accumulator in sync with the manually-set starting length
+      state.stage_essence_earned = Math.max(
+        state.stage_essence_earned,
+        (state.snake_length - 3) * BALANCE.economy.essence_per_length
+      );
     }
   }
 }
@@ -492,6 +481,9 @@ function computeDerived(state) {
 }
 
 function handlePress(state) {
+  // Full — shed threshold reached, no essence accrues until shed
+  if (canShed(state)) return 0.0;
+
   let earned = state.essence_per_press;
 
   // Rattletail: double press chance
@@ -519,6 +511,7 @@ function handlePress(state) {
 
   state.essence += earned;
   state.stats.total_essence_earned += earned;
+  state.stage_essence_earned += earned;
   state.stats.total_presses += 1;
 
   // Venom Rush bonus
@@ -526,24 +519,57 @@ function handlePress(state) {
     const bonus = state.combo_multiplier * BALANCE.rhythm.venom_rush_bonus_mult;
     state.essence += bonus;
     state.stats.total_essence_earned += bonus;
+    state.stage_essence_earned += bonus;
   }
 
-  // Snake growth
+  // Snake growth (from stage accumulator — unaffected by upgrade purchases)
   const epl = BALANCE.economy.essence_per_length;
-  state.snake_length = 3 + Math.floor(state.essence / epl);
+  state.snake_length = 3 + Math.floor(state.stage_essence_earned / epl);
   if (state.snake_length > state.stats.peak_length) state.stats.peak_length = state.snake_length;
+
+  // Cap at shed threshold — no growth or essence past 100%
+  {
+    const _stages = BALANCE.prestige.growth_stages;
+    const _nxt = state.current_stage_index + 1;
+    if (_nxt < _stages.length) {
+      const _cap = _stages[_nxt][0];
+      if (state.snake_length >= _cap) {
+        state.snake_length = _cap;
+        const _capEarned = (_cap - 3) * epl;
+        state.stage_essence_earned = Math.min(state.stage_essence_earned, _capEarned);
+        state.essence = Math.min(state.essence, _capEarned);
+      }
+    }
+  }
 
   return earned;
 }
 
 function tickIdle(state, dt) {
+  // Full — no idle income until shed
+  if (canShed(state)) return 0.0;
+
   const earned = state.idle_income_per_s * dt;
   if (earned > 0) {
     state.essence += earned;
     state.stats.total_essence_earned += earned;
+    state.stage_essence_earned += earned;
     const epl = BALANCE.economy.essence_per_length;
-    state.snake_length = 3 + Math.floor(state.essence / epl);
+    state.snake_length = 3 + Math.floor(state.stage_essence_earned / epl);
     if (state.snake_length > state.stats.peak_length) state.stats.peak_length = state.snake_length;
+
+    // Cap at shed threshold — no growth or essence past 100%
+    const _stages = BALANCE.prestige.growth_stages;
+    const _nxt = state.current_stage_index + 1;
+    if (_nxt < _stages.length) {
+      const _cap = _stages[_nxt][0];
+      if (state.snake_length >= _cap) {
+        state.snake_length = _cap;
+        const _capEarned = (_cap - 3) * epl;
+        state.stage_essence_earned = Math.min(state.stage_essence_earned, _capEarned);
+        state.essence = Math.min(state.essence, _capEarned);
+      }
+    }
   }
   return earned;
 }
@@ -571,8 +597,6 @@ function purchaseUpgrade(state, uid) {
   if (state.essence < cost) return false;
 
   state.essence -= cost;
-  const epl = BALANCE.economy.essence_per_length;
-  state.snake_length = 3 + Math.floor(state.essence / epl);
   state.upgrade_levels[uid] = currentLevel + 1;
   computeDerived(state);
   return true;
@@ -680,6 +704,12 @@ function _applyMiss(state) {
   }
 }
 
+function _getVenomRushTrigger(state) {
+  return state.archetype_id === 'rhythm_incarnate'
+    ? 10
+    : BALANCE.rhythm.venom_rush_trigger_streak;
+}
+
 function getCurrentBpm(state) {
   const bal = BALANCE.rhythm;
   // Apply cosmic_tempo ascension upgrade (MAX_BPM_BONUS)
@@ -738,6 +768,22 @@ function _updateRollingBpm(state, tNow) {
   state.rolling_bpm = count > 0 ? 60.0 / (totalInterval / count) : 0;
 }
 
+// Decay displayed/used rolling BPM while idle.
+// If the player hasn't pressed for longer than one beat interval, cap the
+// effective rolling BPM to what that idle gap permits.
+function tickRollingBpmDecay(state) {
+  if (!state || state.rolling_bpm <= 0) return;
+  const beatInterval = _getBeatInterval(state);
+  const sincePress = now() - (state.last_press_time || 0.0);
+  if (sincePress <= beatInterval) return;
+  const cap = 60.0 / Math.max(sincePress, 1e-6);
+  state.rolling_bpm = Math.min(state.rolling_bpm, cap);
+  if (state.rolling_bpm < 0.5) {
+    state.rolling_bpm    = 0.0;
+    state.perfect_streak = 0;  // rhythm broken — clear streak immediately
+  }
+}
+
 // attemptBite
 // tAt  — beat-position timestamp from last rAF frame (_beatCache.t).
 //        Used only for scoring so cursor pixel and evaluation are aligned.
@@ -748,12 +794,26 @@ function attemptBite(state, tAt) {
   const t    = (tAt !== undefined) ? tAt : tNow;
 
   if (state.frenzy_active) {
+    state.stats.scored_bites += 1;
+    state.stats.perfect_bites += 1;
     state.frenzy_presses += 1;
-    state.combo_hits += 1;
+    state.combo_hits += 2;
     state.combo_misses = 0;
     state.combo_multiplier = _resolveComboMultiplier(state);
     if (state.combo_multiplier > state.stats.combo_high) state.stats.combo_high = state.combo_multiplier;
+    const trigger = _getVenomRushTrigger(state);
+    state.perfect_streak += 1;
+    if (state.perfect_streak % trigger === 0) {
+      const curBeat = Math.floor((tNow - state.beat_origin) / _getBeatInterval(state));
+      state.venom_rush_active   = true;
+      state.venom_rush_end_beat = curBeat + BALANCE.rhythm.venom_rush_beats;
+      state.stats.venom_rush_procs += 1;
+    }
+    state.miss_streak = 0;
+    state.resonance_perfects += 1;
+    if (state.resonance_perfects > state.stats.best_perfect_chain) state.stats.best_perfect_chain = state.resonance_perfects;
     state.last_press_time = tNow;
+    state.last_manual_press_time = tNow;
     _updateRollingBpm(state, tNow);
     const beatInterval = _getBeatInterval(state);
     const elapsed = t - state.beat_origin;
@@ -768,21 +828,27 @@ function attemptBite(state, tAt) {
   // cooldown gate. Every press scores as perfect; win is determined by rolling
   // BPM average at expiry.
   if (state.challenge_active && state.challenge_type === 'FEED_FRENZY') {
-    const trigger = state.archetype_id === 'rhythm_incarnate' ? 3 : BALANCE.rhythm.venom_rush_trigger_streak;
+    state.stats.scored_bites += 1;
+    state.stats.perfect_bites += 1;
+    const trigger = _getVenomRushTrigger(state);
     state.combo_hits += 2;
     state.combo_misses = 0;
     state.combo_multiplier = _resolveComboMultiplier(state);
     if (state.combo_multiplier > state.stats.combo_high) state.stats.combo_high = state.combo_multiplier;
     state.perfect_streak += 1;
-    if (state.perfect_streak >= trigger) {
+    if (state.perfect_streak % trigger === 0) {
+      // Fire venom rush each time the trigger threshold is crossed, but keep
+      // the streak climbing so the HUD counter never resets during the frenzy.
       const curBeat = Math.floor((tNow - state.beat_origin) / _getBeatInterval(state));
       state.venom_rush_active   = true;
       state.venom_rush_end_beat = curBeat + BALANCE.rhythm.venom_rush_beats;
-      state.perfect_streak = 0;
+      state.stats.venom_rush_procs += 1;
     }
     state.miss_streak = 0;
     state.resonance_perfects += 1;
+    if (state.resonance_perfects > state.stats.best_perfect_chain) state.stats.best_perfect_chain = state.resonance_perfects;
     state.last_press_time = tNow;
+    state.last_manual_press_time = tNow;
     _updateRollingBpm(state, tNow);
     state.last_bite_result = 'perfect';
     return 'perfect';
@@ -811,31 +877,36 @@ function attemptBite(state, tAt) {
   state.mouth_open         = false;
   state.bite_cooldown_until = tNow + cooldown;
   state.last_press_time    = tNow;
+  state.last_manual_press_time = tNow;
   _updateRollingBpm(state, tNow);
 
   // Same beat already scored — discard silently.
   if (scoredBeatIndex === state.last_scored_beat_index) return null;
 
   if (dist <= perfectWindow) {
+    state.stats.scored_bites += 1;
+    state.stats.perfect_bites += 1;
     state.last_scored_beat_index = scoredBeatIndex;
     state.combo_hits  += 2;
     state.combo_misses = 0;
     state.combo_multiplier = _resolveComboMultiplier(state);
     if (state.combo_multiplier > state.stats.combo_high) state.stats.combo_high = state.combo_multiplier;
-    const trigger = state.archetype_id === 'rhythm_incarnate' ? 3 : BALANCE.rhythm.venom_rush_trigger_streak;
+    const trigger = _getVenomRushTrigger(state);
     state.perfect_streak += 1;
-    if (state.perfect_streak >= trigger) {
+    if (state.perfect_streak % trigger === 0) {
       state.venom_rush_active  = true;
       state.venom_rush_end_beat = currentBeatIndex + BALANCE.rhythm.venom_rush_beats;
-      state.perfect_streak = 0;
+      state.stats.venom_rush_procs += 1;
     }
     state.miss_streak = 0;
     state.resonance_perfects += 1;
+    if (state.resonance_perfects > state.stats.best_perfect_chain) state.stats.best_perfect_chain = state.resonance_perfects;
     state.last_bite_result = 'perfect';
     return 'perfect';
   }
 
   if (dist <= timingWindow) {
+    state.stats.scored_bites += 1;
     state.last_scored_beat_index = scoredBeatIndex;
     state.combo_hits  += 1;
     state.combo_misses = 0;
@@ -844,6 +915,8 @@ function attemptBite(state, tAt) {
     state.perfect_streak     = 0;
     state.miss_streak        = 0;
     state.resonance_perfects = 0;
+    // Improved Bite: chance to refine a manual good bite → perfect
+    if (_applyGoodToPerfect(state)) return 'honed';
     state.last_bite_result   = 'good';
     return 'good';
   }
@@ -870,22 +943,49 @@ function tickVenomRush(state) {
   if (currentBeat >= state.venom_rush_end_beat) state.venom_rush_active = false;
 }
 
-function tickAutoBite(state) {
-  if (state.frenzy_active) return null;
-
+// Returns true and upgrades bite state if Improved Bite fires.
+function _applyGoodToPerfect(state) {
   let chance = 0.0;
   for (const [uid, level] of Object.entries(state.upgrade_levels)) {
     const udef = ALL_UPGRADES[uid];
-    if (udef && udef.effect === UE.AUTO_BITE_CHANCE && level > 0)
+    if (udef && udef.effect === UE.GOOD_TO_PERFECT_CHANCE && level > 0)
       chance += udef.value_per_level * level;
   }
-  if (chance <= 0.0) return null;
+  if (chance <= 0.0 || Math.random() >= Math.min(chance, 1.0)) return false;
+  const trigger = _getVenomRushTrigger(state);
+  state.perfect_streak += 1;
+  state.stats.perfect_bites += 1;
+  if (state.perfect_streak % trigger === 0) {
+    const bi = _getBeatInterval(state);
+    const cur = Math.floor((now() - state.beat_origin) / bi);
+    state.venom_rush_active  = true;
+    state.venom_rush_end_beat = cur + BALANCE.rhythm.venom_rush_beats;
+    state.stats.venom_rush_procs += 1;
+  }
+  state.resonance_perfects += 1;
+  if (state.resonance_perfects > state.stats.best_perfect_chain) state.stats.best_perfect_chain = state.resonance_perfects;
+  state.last_bite_result = 'perfect';
+  return true;
+}
+
+function tickAutoBite(state) {
+  if (state.frenzy_active) return null;
+
+  // Tally both auto-bite chance types
+  let perfectChance = 0.0;
+  let goodChance    = 0.0;
+  for (const [uid, level] of Object.entries(state.upgrade_levels)) {
+    const udef = ALL_UPGRADES[uid];
+    if (!udef || level <= 0) continue;
+    if (udef.effect === UE.AUTO_BITE_CHANCE)      perfectChance += udef.value_per_level * level;
+    if (udef.effect === UE.IDLE_GOOD_BITE_CHANCE) goodChance    += udef.value_per_level * level;
+  }
+  if (perfectChance <= 0.0 && goodChance <= 0.0) return null;
 
   const idleBonus = Math.min(
     state.idle_seconds * BALANCE.rhythm.idle_escalation_rate,
     BALANCE.rhythm.idle_escalation_cap,
   );
-  const totalChance = Math.min(chance + idleBonus, 0.95);
 
   const t = now();
   const beatInterval = _getBeatInterval(state);
@@ -893,22 +993,79 @@ function tickAutoBite(state) {
   const currentBeatIndex = Math.floor(elapsed / beatInterval);
 
   if (currentBeatIndex <= state.last_auto_bite_beat_index) return null;
-  state.last_auto_bite_beat_index = currentBeatIndex;
 
-  if (Math.random() >= totalChance) return null;
+  // Only fire if the player has missed at least one beat (is actually idle)
+  if (currentBeatIndex <= state.last_scored_beat_index) return null;
+
+  // Only fire after the timing window for this beat has fully closed —
+  // don't steal a beat the player could still hit themselves.
+  const beatPos = elapsed - currentBeatIndex * beatInterval;
+  if (beatPos < _getTimingWindow(state)) return null;
+
+  state.last_auto_bite_beat_index = currentBeatIndex;
   if (!state.mouth_open) return null;
 
   const cooldown = beatInterval * BALANCE.rhythm.bite_cooldown_fraction;
-  state.mouth_open = false;
-  state.bite_cooldown_until = t + cooldown;
-  state.last_press_time = t;
-  state.last_scored_beat_index = currentBeatIndex;
-  state.combo_hits += 2;
-  state.combo_misses = 0;
-  state.combo_multiplier = _resolveComboMultiplier(state);
-  if (state.combo_multiplier > state.stats.combo_high) state.stats.combo_high = state.combo_multiplier;
-  state.last_bite_result = 'perfect';
-  return 'perfect';
+  const AUTO_BITE_SUCCESS_CAP = 0.90;
+
+  // Convert raw roll chances into an effective pair that guarantees
+  // total auto-bite success per beat never exceeds 90%:
+  //   P(total) = p + (1-p)q
+  // where p = perfect roll chance, q = good roll chance (if perfect misses).
+  let perfectRollChance = Math.min(Math.max(perfectChance + idleBonus, 0.0), AUTO_BITE_SUCCESS_CAP);
+  let goodRollChance    = Math.min(Math.max(goodChance + idleBonus, 0.0), AUTO_BITE_SUCCESS_CAP);
+  if (goodRollChance > 0.0) {
+    const maxGoodGivenPerfect = Math.max(0.0, (AUTO_BITE_SUCCESS_CAP - perfectRollChance) / Math.max(1e-9, (1.0 - perfectRollChance)));
+    goodRollChance = Math.min(goodRollChance, maxGoodGivenPerfect);
+  }
+
+  // Roll perfect auto-bite first (Serpent Instinct)
+  if (perfectRollChance > 0.0 && Math.random() < perfectRollChance) {
+    state.stats.scored_bites += 1;
+    state.stats.perfect_bites += 1;
+    state.mouth_open = false;
+    state.bite_cooldown_until = t + cooldown;
+    state.last_press_time = t;
+    state.last_scored_beat_index = currentBeatIndex;
+    state.combo_hits += 2;
+    state.combo_misses = 0;
+    state.combo_multiplier = _resolveComboMultiplier(state);
+    if (state.combo_multiplier > state.stats.combo_high) state.stats.combo_high = state.combo_multiplier;
+    const trigger = _getVenomRushTrigger(state);
+    state.perfect_streak += 1;
+    if (state.perfect_streak % trigger === 0) {
+      state.venom_rush_active  = true;
+      state.venom_rush_end_beat = currentBeatIndex + BALANCE.rhythm.venom_rush_beats;
+      state.stats.venom_rush_procs += 1;
+    }
+    state.miss_streak = 0;
+    state.resonance_perfects += 1;
+    if (state.resonance_perfects > state.stats.best_perfect_chain) state.stats.best_perfect_chain = state.resonance_perfects;
+    state.last_bite_result = 'perfect';
+    return 'perfect';
+  }
+
+  // Roll idle good auto-bite (Auto Bite upgrade)
+  if (goodRollChance > 0.0 && Math.random() < goodRollChance) {
+    state.stats.scored_bites += 1;
+    state.mouth_open = false;
+    state.bite_cooldown_until = t + cooldown;
+    state.last_press_time = t;
+    state.last_scored_beat_index = currentBeatIndex;
+    state.combo_hits += 1;
+    state.combo_misses = 0;
+    state.combo_multiplier = _resolveComboMultiplier(state);
+    if (state.combo_multiplier > state.stats.combo_high) state.stats.combo_high = state.combo_multiplier;
+    state.perfect_streak     = 0;
+    state.miss_streak        = 0;
+    state.resonance_perfects = 0;
+    // Improved Bite synergy: auto-good can also be refined
+    if (_applyGoodToPerfect(state)) return 'honed';
+    state.last_bite_result = 'good';
+    return 'auto-good';
+  }
+
+  return null;
 }
 
 function tickComboDecay(state) {
@@ -930,8 +1087,10 @@ function tickComboDecay(state) {
     state.combo_hits = 0;
     state.combo_misses = 0;
     state.combo_multiplier = 1.0;
-    // Missing enough beats to break a built-up combo → leaking_venom
-    if (hadCombo) _applyDebuff(state, 'leaking_venom');
+    // Only penalise with leaking_venom if the player was actively pressing —
+    // auto-bite and idle combo decay should not trigger it.
+    const playerWasActive = hadCombo && (now() - state.last_manual_press_time) < 5.0;
+    if (playerWasActive) _applyDebuff(state, 'leaking_venom');
   }
 }
 
@@ -961,7 +1120,7 @@ function tickPostFrenzyBpm(state) {
 
   state.post_frenzy_bpm = Math.max(state.post_frenzy_bpm - 10.0, natural);
   if (state.post_frenzy_bpm <= natural) state.post_frenzy_bpm = 0.0;
-  else state.post_frenzy_next_step = t + 5.0;
+  else state.post_frenzy_next_step = t + 3.0;
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -1011,10 +1170,13 @@ function performShed(state) {
   state.total_scales_earned += scalesEarned;
   state.snake_length = newLength;
   state.essence = newEssence;
+  // Reset per-stage accumulator so the formula gives exactly newLength on next tick
+  state.stage_essence_earned = newEssence;
   state.combo_hits = 0;
   state.combo_misses = 0;
   state.combo_multiplier = 1.0;
   state.last_press_time = 0.0;
+  state.last_manual_press_time = 0.0;
   state.last_scored_beat_index = -1;
   state.last_auto_bite_beat_index = -1;
   state.idle_seconds = 0.0;
@@ -1145,9 +1307,22 @@ class EventManager {
     const ctype = randChoice(types);
     const dur = BALANCE.events.challenge_duration_s;
     if (ctype === 'FEED_FRENZY') {
+      const baseBpm = BALANCE.events.feed_frenzy_base_bpm;
+      const maxBpm  = Math.max(baseBpm, BALANCE.events.feed_frenzy_max_bpm);
+      const stepBpm = Math.max(10, BALANCE.events.feed_frenzy_step_bpm);
+      const totalTiers = Math.floor((maxBpm - baseBpm) / stepBpm) + 1;
+      const tier = Math.max(1, Math.floor(Math.random() * totalTiers) + 1);
+      const targetBpm = baseBpm + (tier - 1) * stepBpm;
       // Target is a rolling BPM average. Cursor pins to centre so timing is
       // irrelevant — pure mashing speed decides the outcome.
-      return { ctype, description:`Feeding Frenzy: mash at 150 BPM avg!`, target: 150.0, duration_s:dur, reward_mult:5.0 };
+      return {
+        ctype,
+        description:`Feeding Frenzy [T${tier}]: mash at ${targetBpm.toFixed(0)} BPM avg!`,
+        target: targetBpm,
+        duration_s: dur,
+        reward_mult: 5.0,
+        reward_tier: tier,
+      };
     }
     if (ctype === 'COMBO_SUSTAIN') {
       const comboTarget = randChoice([3.0, 5.0, 8.0]);
@@ -1179,13 +1354,10 @@ class EventManager {
     // Feeding Frenzy expiry
     if (state.frenzy_active && t >= state.frenzy_end_time) {
       state.frenzy_active = false;
-      const reward = state.essence_per_press * state.frenzy_presses * BALANCE.events.golden_reward_multiplier;
-      state.essence += reward;
-      state.stats.total_essence_earned += reward;
-      notifications.push(`frenzy_end:${state.frenzy_presses}:${reward.toFixed(0)}`);
+      notifications.push(`frenzy_end:${state.frenzy_presses}:0`);
       state.frenzy_presses = 0;
       state.post_frenzy_bpm = BALANCE.rhythm.max_bpm;
-      state.post_frenzy_next_step = t + 10.0;
+      state.post_frenzy_next_step = t + 3.0;
     }
 
     // Timed Challenges
@@ -1255,7 +1427,8 @@ class EventManager {
           // Win if rolling BPM is at or above target when time expires
           if (state.rolling_bpm >= spec.target) {
             state.stats.challenges_completed += 1;
-            const reward = state.essence_per_press * spec.reward_mult * 10;
+            const tierMult = Math.max(1, spec.reward_tier || 1);
+            const reward = state.essence_per_press * spec.reward_mult * 10 * tierMult;
             state.essence += reward;
             state.stats.total_essence_earned += reward;
             notifications.push(`challenge_complete:${reward.toFixed(0)}`);
@@ -1313,6 +1486,33 @@ class EventManager {
     state.golden_active = false;
     state.stats.golden_caught += 1;
     this._nextGoldenTime = this._scheduleGolden();
+
+    // Catching a Golden Ouroboros counts as a perfect bite and contributes
+    // to the visible perfect chain/counter.
+    state.stats.scored_bites += 1;
+    state.stats.perfect_bites += 1;
+    state.combo_hits += 2;
+    state.combo_misses = 0;
+    state.combo_multiplier = _resolveComboMultiplier(state);
+    if (state.combo_multiplier > state.stats.combo_high) state.stats.combo_high = state.combo_multiplier;
+    const trigger = _getVenomRushTrigger(state);
+    state.perfect_streak += 1;
+    if (state.perfect_streak % trigger === 0) {
+      const beatInterval = _getBeatInterval(state);
+      const elapsed = now() - state.beat_origin;
+      const currentBeat = Math.floor(elapsed / beatInterval);
+      state.venom_rush_active  = true;
+      state.venom_rush_end_beat = currentBeat + BALANCE.rhythm.venom_rush_beats;
+      state.stats.venom_rush_procs += 1;
+    }
+    state.miss_streak = 0;
+    state.resonance_perfects += 1;
+    if (state.resonance_perfects > state.stats.best_perfect_chain) state.stats.best_perfect_chain = state.resonance_perfects;
+    const pressTime = now();
+    state.last_press_time = pressTime;
+    state.last_manual_press_time = pressTime;
+    _updateRollingBpm(state, pressTime);
+    state.last_bite_result = 'perfect';
 
     state.frenzy_active = true;
     const tiersEarned = BALANCE.rhythm.combo_tiers.filter(([h]) => state.combo_hits >= h).length;
@@ -1389,9 +1589,37 @@ class EventManager {
 // ─────────────────────────────────────────────────────────────────
 // SAVE / LOAD  (localStorage — mirrors engine/save.py + meta.py)
 // ─────────────────────────────────────────────────────────────────
-const LS_RUN_KEY  = 'ouro_run_v1';
-const LS_META_KEY = 'ouro_meta_v1';
-const LS_EVT_KEY  = 'ouro_events_v1';
+const LS_RUN_KEY  = 'ouro_run_v2';
+const LS_META_KEY = 'ouro_meta_v2';
+const LS_EVT_KEY  = 'ouro_events_v2';
+const LS_SAVE_EPOCH_KEY = 'ouro_save_epoch_v1';
+
+function getSaveEpoch() {
+  try {
+    let epoch = localStorage.getItem(LS_SAVE_EPOCH_KEY);
+    if (!epoch) {
+      epoch = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      localStorage.setItem(LS_SAVE_EPOCH_KEY, epoch);
+    }
+    return epoch;
+  } catch (e) {
+    return 'ephemeral';
+  }
+}
+
+function rotateSaveEpoch() {
+  const epoch = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  try { localStorage.setItem(LS_SAVE_EPOCH_KEY, epoch); } catch (e) { /* non-fatal */ }
+  return epoch;
+}
+
+function purgeAllSaveData() {
+  try {
+    localStorage.removeItem(LS_RUN_KEY);
+    localStorage.removeItem(LS_META_KEY);
+    localStorage.removeItem(LS_EVT_KEY);
+  } catch (e) { /* non-fatal */ }
+}
 
 function saveRun(state, events) {
   try {
@@ -1404,8 +1632,7 @@ function saveRun(state, events) {
       archetype_id: state.archetype_id,
       resonance_perfects: state.resonance_perfects,
       combo_peak_seconds: state.combo_peak_seconds,
-      archetype_offer_id: state.archetype_offer_id,
-      archetype_offer_expires: state.archetype_offer_expires,
+      archetype_switch_available_at: state.archetype_switch_available_at,
       debuff_id: state.debuff_id,
       debuff_end_time: state.debuff_end_time,
       miss_streak: state.miss_streak,
@@ -1413,6 +1640,7 @@ function saveRun(state, events) {
       combo_multiplier: state.combo_multiplier,
       combo_misses: state.combo_misses,
       last_press_time: state.last_press_time,
+      last_manual_press_time: state.last_manual_press_time,
       beat_origin: state.beat_origin,
       last_scored_beat_index: state.last_scored_beat_index,
       last_auto_bite_beat_index: state.last_auto_bite_beat_index,
@@ -1441,6 +1669,7 @@ function saveRun(state, events) {
       current_offerings: [...state.current_offerings],
       essence_per_press: state.essence_per_press,
       idle_income_per_s: state.idle_income_per_s,
+      stage_essence_earned: state.stage_essence_earned,
       stats: Object.assign({}, state.stats),
     };
     localStorage.setItem(LS_RUN_KEY, JSON.stringify(d));
@@ -1468,8 +1697,7 @@ function loadRun() {
       archetype_id: d.archetype_id ?? '',
       resonance_perfects: d.resonance_perfects ?? 0,
       combo_peak_seconds: d.combo_peak_seconds ?? 0,
-      archetype_offer_id: d.archetype_offer_id ?? '',
-      archetype_offer_expires: d.archetype_offer_expires ?? 0,
+      archetype_switch_available_at: d.archetype_switch_available_at ?? 0,
       debuff_id: d.debuff_id ?? '',
       debuff_end_time: d.debuff_end_time ?? 0,
       miss_streak: d.miss_streak ?? 0,
@@ -1477,6 +1705,7 @@ function loadRun() {
       combo_multiplier: d.combo_multiplier ?? 1,
       combo_misses: d.combo_misses ?? 0,
       last_press_time: d.last_press_time ?? 0,
+      last_manual_press_time: d.last_manual_press_time ?? 0,
       beat_origin: beatOrigin,
       last_scored_beat_index: d.last_scored_beat_index ?? -1,
       last_auto_bite_beat_index: d.last_auto_bite_beat_index ?? -1,
@@ -1505,6 +1734,8 @@ function loadRun() {
       current_offerings: d.current_offerings ?? [],
       essence_per_press: d.essence_per_press ?? 1,
       idle_income_per_s: d.idle_income_per_s ?? 0,
+      // Backwards compat: old saves lack this field; seed from snake_length so length is preserved
+      stage_essence_earned: d.stage_essence_earned ?? ((d.snake_length ?? 3) - 3) * 10,
       stats,
     });
     return state;
@@ -1512,12 +1743,16 @@ function loadRun() {
 }
 
 function deleteRun() {
-  localStorage.removeItem(LS_RUN_KEY);
-  localStorage.removeItem(LS_EVT_KEY);
+  try {
+    localStorage.removeItem(LS_RUN_KEY);
+    localStorage.removeItem(LS_EVT_KEY);
+  } catch (e) { /* non-fatal */ }
 }
 
 function deleteMeta() {
-  localStorage.removeItem(LS_META_KEY);
+  try {
+    localStorage.removeItem(LS_META_KEY);
+  } catch (e) { /* non-fatal */ }
 }
 
 function loadEvents() {
@@ -1535,6 +1770,7 @@ function saveMeta(meta) {
       starting_length_bonus: meta.starting_length_bonus,
       unlocked_upgrade_ids: meta.unlocked_upgrade_ids,
       unlocked_event_types: meta.unlocked_event_types,
+      unlocked_archetypes: meta.unlocked_archetypes,
       ascension_count: meta.ascension_count,
       ascension_upgrade_levels: meta.ascension_upgrade_levels,
       unlocked_skins: meta.unlocked_skins,
@@ -1545,6 +1781,8 @@ function saveMeta(meta) {
       best_total_essence: meta.best_total_essence,
       total_golden_caught: meta.total_golden_caught,
       total_challenges_completed: meta.total_challenges_completed,
+      auto_save_enabled: meta.auto_save_enabled,
+      show_welcome_modal: meta.show_welcome_modal,
     }));
   } catch (e) { /* non-fatal */ }
 }
@@ -1559,6 +1797,7 @@ function loadMeta() {
       starting_length_bonus: d.starting_length_bonus ?? 0,
       unlocked_upgrade_ids: d.unlocked_upgrade_ids ?? [],
       unlocked_event_types: d.unlocked_event_types ?? [],
+      unlocked_archetypes: d.unlocked_archetypes ?? [],
       ascension_count: d.ascension_count ?? 0,
       ascension_upgrade_levels: d.ascension_upgrade_levels ?? {},
       unlocked_skins: d.unlocked_skins ?? ['emerald'],
@@ -1569,6 +1808,8 @@ function loadMeta() {
       best_total_essence: d.best_total_essence ?? 0,
       total_golden_caught: d.total_golden_caught ?? 0,
       total_challenges_completed: d.total_challenges_completed ?? 0,
+      auto_save_enabled: d.auto_save_enabled ?? true,
+      show_welcome_modal: d.show_welcome_modal ?? true,
     });
   } catch (e) { return newMetaState(); }
 }
@@ -1577,17 +1818,19 @@ function loadMeta() {
 // NEW RUN FACTORY  (mirrors app.py _new_run_state)
 // ─────────────────────────────────────────────────────────────────
 function createNewRunState(meta) {
-  const archetype = randChoice(Object.values(ALL_ARCHETYPES));
+  // No archetype is assigned at run start — player selects from unlocked archetypes.
   const state = newGameState({
     snake_length: getStartingLength(meta),
-    archetype_id: archetype.id,
+    archetype_id: '',
     beat_origin: now(),
     stats: newRunStats({ run_start_time: now() }),
   });
-  for (const [uid, level] of Object.entries(archetype.starting_upgrades)) {
-    state.upgrade_levels[uid] = level;
-  }
   applyAscensionStartingBonuses(meta, state);
+  // Sync accumulator to whatever starting length was applied
+  state.stage_essence_earned = Math.max(
+    state.stage_essence_earned,
+    (state.snake_length - 3) * BALANCE.economy.essence_per_length
+  );
   computeDerived(state);
   return state;
 }
