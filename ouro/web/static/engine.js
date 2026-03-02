@@ -415,6 +415,148 @@ function applyRunResults(meta, stats) {
   return knowledge;
 }
 
+// Check skin unlock conditions — must be called AFTER meta.ascension_count is
+// incremented and BEFORE performAscension() wipes state.upgrade_levels.
+// Returns array of newly granted skin ids.
+function checkAndGrantSkins(meta, state) {
+  const already = new Set(meta.unlocked_skins);
+  const granted = [];
+  function tryGrant(id) {
+    if (!already.has(id)) {
+      meta.unlocked_skins.push(id);
+      already.add(id);
+      granted.push(id);
+    }
+  }
+
+  // Obsidian — complete first Ascension
+  if (meta.ascension_count >= 1) tryGrant('obsidian');
+
+  // Golden — earn 1 trillion Essence in a single run
+  if (state.stats.total_essence_earned >= 1e12) tryGrant('golden');
+
+  // Skeletal — ascend without purchasing any run upgrades this run
+  const upgradesPurchased = Object.values(state.upgrade_levels).reduce((a, b) => a + b, 0);
+  if (upgradesPurchased === 0) tryGrant('skeletal');
+
+  // Prismatic — sustain a 100-hit Perfect streak in a single run
+  if (state.stats.best_perfect_chain >= 100) tryGrant('prismatic');
+
+  // Void — complete 5 Ascensions
+  if (meta.ascension_count >= 5) tryGrant('void');
+
+  // Ancient — collect all lore fragments
+  if ((meta.collected_lore_ids ?? []).length >= LORE_FRAGMENTS.length) tryGrant('ancient');
+
+  return granted;
+}
+
+// Check lore fragment unlock conditions and add newly earned fragments to meta.
+// Safe to call at shed-time and ascension-time — uses effective (additive)
+// values so lifetime stats that are only flushed at ascension still work.
+// Returns array of newly granted lore ids.
+function checkAndGrantLore(meta, state) {
+  const already = new Set(meta.collected_lore_ids);
+  const granted = [];
+  function tryGrant(id) {
+    if (!already.has(id)) {
+      meta.collected_lore_ids.push(id);
+      already.add(id);
+      granted.push(id);
+    }
+  }
+
+  const ss   = state.stats;
+  const asc  = meta.ascension_count;   // incremented before this call at ascension
+  const runs = meta.total_runs;        // incremented before this call at ascension
+  // Effective lifetime peak — includes current run even before applyRunResults
+  const pl   = Math.max(meta.best_peak_length, ss.peak_length, state.snake_length);
+  // Effective lifetime goldens / challenges — additive with current run
+  const kg   = meta.total_golden_caught + ss.golden_caught;
+  const kc   = meta.total_challenges_completed + ss.challenges_completed;
+  const sk   = meta.serpent_knowledge; // flushed at ascension; 0 at shed until first asc
+
+  // lore_01  First Bite — complete your very first shed
+  if (ss.sheds >= 1)                    tryGrant('lore_01');
+  // lore_02  The First Void — complete your first Ascension
+  if (asc >= 1)                         tryGrant('lore_02');
+  // lore_03  Shape — grow to Local Predator (length ≥ 2,000)
+  if (pl >= 2_000)                      tryGrant('lore_03');
+  // lore_04  The First Bite — land a 20-hit Perfect streak in one run
+  if (ss.best_perfect_chain >= 20)      tryGrant('lore_04');
+  // lore_05  Growth — grow to National Constrictor (length ≥ 100,000)
+  if (pl >= 100_000)                    tryGrant('lore_05');
+  // lore_06  The Rhythm — land a 50-hit Perfect streak in one run
+  if (ss.best_perfect_chain >= 50)      tryGrant('lore_06');
+  // lore_07  Shedding — shed through all 9 stages in a single run
+  if (ss.sheds >= 9)                    tryGrant('lore_07');
+  // lore_08  Scales — grow to Stellar Devourer (length ≥ 800,000,000)
+  if (pl >= 800_000_000)                tryGrant('lore_08');
+  // lore_09  The Bargain — complete 15 challenges across all runs
+  if (kc >= 15)                         tryGrant('lore_09');
+  // lore_10  Echo — catch 50 Golden Ouroboros across all runs
+  if (kg >= 50)                         tryGrant('lore_10');
+  // lore_11  The Frenzy — catch 10 Golden Ouroboros in a single run
+  if (ss.golden_caught >= 10)            tryGrant('lore_11');
+  // lore_12  Ascension — complete your 3rd Ascension
+  if (asc >= 3)                         tryGrant('lore_12');
+  // lore_13  Knowledge — accumulate 50 Serpent Knowledge
+  if (sk >= 50)                         tryGrant('lore_13');
+  // lore_14  The Snakelet — complete 5 total runs
+  if (runs >= 5)                        tryGrant('lore_14');
+  // lore_15  Time — accumulate 150 Serpent Knowledge
+  if (sk >= 150)                        tryGrant('lore_15');
+  // lore_16  Memory — accumulate 500 Serpent Knowledge across all ascensions
+  if (sk >= 500)                        tryGrant('lore_16');
+  // lore_17  The Golden One — catch 25 Golden Ouroboros across all runs
+  if (kg >= 25)                         tryGrant('lore_17');
+  // lore_18  Void Fang — grow to Galactic Ouroboros (length ≥ 16,000,000,000)
+  if (pl >= 16_000_000_000)             tryGrant('lore_18');
+  // lore_19  The Challenge — complete 50 challenges across all runs
+  if (kc >= 50)                         tryGrant('lore_19');
+  // lore_20  Eternal Return — complete 7 Ascensions
+  if (asc >= 7)                         tryGrant('lore_20');
+
+  return granted;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// COLLECTIONS — SNAKE SKINS & LORE FRAGMENTS
+// ─────────────────────────────────────────────────────────────────
+
+const SNAKE_SKINS = [
+  { id: 'emerald',   name: 'Emerald',   color: '#2ecc71', unlockDesc: 'Default skin — you begin here.' },
+  { id: 'prismatic', name: 'Prismatic', color: '#a29bfe', unlockDesc: 'Sustain a 100-hit Perfect streak' },
+  { id: 'golden',    name: 'Golden',    color: '#f1c40f', unlockDesc: 'Earn 1 trillion total Essence in a single run.' },
+  { id: 'obsidian',  name: 'Obsidian',  color: '#8e9ba8', unlockDesc: 'Complete your first Ascension.' },
+  { id: 'skeletal',  name: 'Skeletal',  color: '#dfe6e9', unlockDesc: 'Complete an Ascension without purchasing any run upgrades.' },
+  { id: 'void',      name: 'Void',      color: '#6c5ce7', unlockDesc: 'Complete 5 Ascensions.' },
+  { id: 'ancient',   name: 'Ancient',   color: '#e17055', unlockDesc: 'Collect all 20 lore fragments.' },
+];
+
+const LORE_FRAGMENTS = [
+  { id: 'lore_01', title: 'I. Hunger Eternal',       text: 'In the beginning, there was only hunger. Not the hunger of beasts — this hunger had no mouth, no stomach, no name. It simply was.' },
+  { id: 'lore_02', title: 'II. The First Void',      text: 'The first serpent had no tail to eat, so it consumed the void instead. The void tasted of everything that had not yet happened.' },
+  { id: 'lore_03', title: 'III. Shape',              text: 'From hunger came form. From form came coil. The serpent curved back upon itself and found, with some surprise, that its own tail was warm.' },
+  { id: 'lore_04', title: 'IV. The First Bite',      text: 'The moment the jaws closed, the universe exhaled. This was not destruction — it was the first complete sentence ever spoken.' },
+  { id: 'lore_05', title: 'V. Growth',               text: 'To consume is to grow. To grow is to hunger more. The logic was perfect and terrible and the serpent adored it.' },
+  { id: 'lore_06', title: 'VI. The Rhythm',          text: 'They say the heartbeat of the world is the serpent\'s jaw opening and closing. 60 beats per minute at rest. More when it stirs.' },
+  { id: 'lore_07', title: 'VII. Shedding',           text: 'What is left behind is not waste. The shed skin holds the memory of every length the serpent has been. Scholars press their ears to old skins and hear whispers.' },
+  { id: 'lore_08', title: 'VIII. Scales',            text: 'Each scale is a calcified moment. The serpent carries its entire history on its back, hardened into currency.' },
+  { id: 'lore_09', title: 'IX. The Bargain',         text: 'Once a serpent grows long enough, it may negotiate with its own hunger. «Give me less now,» it says, «for something greater later.» Hunger always agrees.' },
+  { id: 'lore_10', title: 'X. Echo',                 text: 'Old serpents leave impressions in the dark. Sometimes a passing coil will trip over one — a free meal, a ghost upgrade, a gift from a self that no longer exists.' },
+  { id: 'lore_11', title: 'XI. The Frenzy',          text: 'There are moments when the rhythm breaks entirely and only mashing remains. These are the holiest moments. The serpent forgets it is a serpent and becomes pure appetite.' },
+  { id: 'lore_12', title: 'XII. Ascension',          text: 'The ouroboros, grown cosmic, swallows the last of itself. For one perfect instant it contains everything. Then it is reborn — smaller, hungrier, better.' },
+  { id: 'lore_13', title: 'XIII. Knowledge',         text: 'What survives death? Not length. Not essence. Only what was learned. The serpent is always smarter on the second loop.' },
+  { id: 'lore_14', title: 'XIV. The Snakelet',       text: 'Hatchlings are the most dangerous thing in existence. They do not know yet that they will one day eat the sun. They are still learning to want.' },
+  { id: 'lore_15', title: 'XV. Time',                text: 'The world measures time in years. The serpent measures time in coils. They are the same unit, viewed from opposite ends.' },
+  { id: 'lore_16', title: 'XVI. Memory',             text: 'Were you here before? The skin says yes. The hunger says it doesn\'t matter. Somewhere between them, identity clings on.' },
+  { id: 'lore_17', title: 'XVII. The Golden One',    text: 'Occasionally a serpent sheds a scale that lands perfectly — catches the light, burns gold. This is not luck. This is the universe showing off.' },
+  { id: 'lore_18', title: 'XVIII. Void Fang',        text: 'The oldest serpents develop a tooth that cuts through nothing itself. Economists call this leverage. The serpent calls it dessert.' },
+  { id: 'lore_19', title: 'XIX. The Challenge',      text: 'Not every bite is equal. Some must be chiseled at, timed precisely, earned the hard way. The serpent never objects. Resistance is just flavor.' },
+  { id: 'lore_20', title: 'XX. Eternal Return',      text: 'At the end of all loops, the serpent opens its eyes and sees the beginning waiting. «Again,» it says, already hungry. The universe replies: «Yes. Always.»' },
+];
+
 // ─────────────────────────────────────────────────────────────────
 // ECONOMY ENGINE  (mirrors engine/economy.py)
 // ─────────────────────────────────────────────────────────────────
