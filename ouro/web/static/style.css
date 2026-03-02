@@ -818,6 +818,10 @@ kbd {
     letter-spacing: 2px;
     color: var(--cyan);
     text-shadow: 0 0 14px rgba(0, 212, 255, 0.6), 0 0 28px rgba(0, 212, 255, 0.25);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    min-width: 10ch;
+    text-align: center;
 }
 
 /* ── Shed Progress Bar (under length in snake display) ──────── */
