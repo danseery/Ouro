@@ -1335,8 +1335,8 @@ function doShed() {
 
 function catchGolden() {
   if (!state || !events) return;
-  events.catchGolden(state);
-  showToast('🐍 FEEDING FRENZY! MASH SPACE!', 'warning');
+  const caught = events.catchGolden(state);
+  if (caught) showToast('🐍 FEEDING FRENZY! MASH SPACE!', 'warning');
   renderAll();
 }
 

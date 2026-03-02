@@ -812,15 +812,13 @@ kbd {
 
 .snake-length {
     margin-top: 2px;
-    font-family: var(--font-display);
+    font-family: 'Space Mono', var(--font-mono);
     font-size: 1.8rem;
-    font-weight: 900;
+    font-weight: 700;
     letter-spacing: 2px;
     color: var(--cyan);
     text-shadow: 0 0 14px rgba(0, 212, 255, 0.6), 0 0 28px rgba(0, 212, 255, 0.25);
-    font-variant-numeric: tabular-nums;
-    font-feature-settings: "tnum" 1;
-    min-width: 10ch;
+    width: 100%;
     text-align: center;
 }
 
