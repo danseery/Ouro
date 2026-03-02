@@ -168,6 +168,10 @@ const dom = {
   guideModal:         $('#guide-modal'),
   guideCloseBtn:      $('#btn-guide-close'),
   guideContent:       $('#guide-content'),
+  collectionsBtn:         $('#btn-collections'),
+  collectionsModal:       $('#collections-modal'),
+  collectionsCloseBtn:    $('#btn-collections-close'),
+  collectionsContent:     $('#collections-content'),
 };
 
 // ---------------------------------------------------------------------------
@@ -422,12 +426,31 @@ function _drawStageIcon(ctx, stageIdx, cx, cy, size, col) {
 }
 
 
+// Fast HSL→RGB for the Prismatic skin rainbow cycle.
+function _hslToRgb(h, s, l) {
+  h = ((h % 360) + 360) % 360; s /= 100; l /= 100;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => { const k = (n + h / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
+  return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+}
+
 function _stageColor(stageIdx, isFrenzy) {
-  if (isFrenzy)          return [255, 160,   0];
-  if (stageIdx >= 8)     return [200, 120, 255];
-  if (stageIdx >= 6)     return [100, 160, 255];
-  if (stageIdx >= 4)     return [  0, 220, 255];
-  return [  0, 255, 136];
+  // Frenzy always overrides to orange regardless of skin.
+  if (isFrenzy) return [255, 160, 0];
+  const skin = meta?.active_skin ?? 'emerald';
+  switch (skin) {
+    case 'golden':    return [241, 193,  15];
+    case 'prismatic': return _hslToRgb((Date.now() / 20) % 360, 100, 65);
+    case 'obsidian':  return [142, 155, 168];
+    case 'skeletal':  return [223, 230, 233];
+    case 'void':      return [108,  92, 231];
+    case 'ancient':   return [225, 112,  85];
+    default:  // emerald — original stage-based palette
+      if (stageIdx >= 8) return [200, 120, 255];
+      if (stageIdx >= 6) return [100, 160, 255];
+      if (stageIdx >= 4) return [  0, 220, 255];
+      return [0, 255, 136];
+  }
 }
 
 // Shed animation state
@@ -582,7 +605,19 @@ function renderSnake() {
       _shedAnim = null;
       const scalesEarned = performShed(state);
       const stageName    = _growthStage(state);
+      // Skin + lore checks — performShed already incremented stats.sheds
+      const newSkinsAtShed = checkAndGrantSkins(meta, state);
+      const newLoreAtShed  = checkAndGrantLore(meta, state);
+      if (newSkinsAtShed.length > 0 || newLoreAtShed.length > 0) saveMeta(meta);
       showToast(`🐍 Shed Skin → ${stageName}! +${Math.floor(scalesEarned)} Scales`, 'warning');
+      for (const lid of newLoreAtShed) {
+        const frag = LORE_FRAGMENTS.find(f => f.id === lid);
+        showToast(`📜 Lore: ${frag ? frag.title : lid}`, 'info');
+      }
+      for (const sid of newSkinsAtShed) {
+        const skin = SNAKE_SKINS.find(s => s.id === sid);
+        showToast(`🎨 Skin unlocked: ${skin ? skin.name : sid}!`, 'success');
+      }
       refreshOfferings(state, getUnlockedUpgradeSet(meta));
       computeDerived(state);
       renderAll();
@@ -1449,6 +1484,10 @@ function confirmAscension() {
   meta.ascension_count += 1;
   applyRunResults(meta, state.stats);
 
+  // Skin & lore unlock checks — must run before performAscension wipes state
+  const newSkins = checkAndGrantSkins(meta, state);
+  const newLore  = checkAndGrantLore(meta, state);
+
   performAscension(state);
   applyAscensionStartingBonuses(meta, state);
 
@@ -1467,6 +1506,14 @@ function confirmAscension() {
 
   events = new EventManager();
 
+  for (const lid of newLore) {
+    const frag = LORE_FRAGMENTS.find(f => f.id === lid);
+    showToast(`📜 Lore: ${frag ? frag.title : lid}`, 'info');
+  }
+  for (const skinId of newSkins) {
+    const skin = SNAKE_SKINS.find(s => s.id === skinId);
+    showToast(`🎨 Skin unlocked: ${skin ? skin.name : skinId}!`, 'success');
+  }
   showToast(`✦ ASCENSION ${meta.ascension_count}! The eternal cycle begins anew.`, 'warning');
   closeAscensionModal();
   saveMeta(meta);
@@ -1518,6 +1565,10 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
+  if (dom.collectionsModal && !dom.collectionsModal.classList.contains('hidden')) {
+    if (e.key === 'Escape') closeCollections();
+    return;
+  }
   if (dom.settingsModal && !dom.settingsModal.classList.contains('hidden')) {
     if (e.key === 'Escape') closeSettings();
     return;
@@ -1564,6 +1615,19 @@ dom.biteBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); doFeed(
 dom.shedBtn.addEventListener('click', doShed);
 dom.ascendBtn.addEventListener('click', openAscensionModal);
 dom.saveBtn.addEventListener('click', doSave);
+if (dom.collectionsBtn)      dom.collectionsBtn.addEventListener('click', openCollections);
+if (dom.collectionsCloseBtn) dom.collectionsCloseBtn.addEventListener('click', closeCollections);
+if (dom.collectionsModal) {
+  dom.collectionsModal.addEventListener('click', (e) => {
+    if (e.target === dom.collectionsModal) closeCollections();
+  });
+}
+if (dom.collectionsModal) {
+  dom.collectionsModal.addEventListener('click', (e) => {
+    const btn = e.target.closest('.guide-tab[data-col-tab]');
+    if (btn) _renderCollectionsTab(btn.dataset.colTab);
+  });
+}
 if (dom.settingsBtn) dom.settingsBtn.addEventListener('click', openSettings);
 if (dom.settingsCloseBtn) dom.settingsCloseBtn.addEventListener('click', closeSettings);
 if (dom.settingsModal) {
@@ -1829,6 +1893,119 @@ const GUIDE_TABS = {
     return html;
   },
 };
+
+// ---------------------------------------------------------------------------
+// Collections Modal
+// ---------------------------------------------------------------------------
+
+let _activeColTab = 'lore';
+
+function _buildCollectionsLore() {
+  const collected = new Set(meta?.collected_lore_ids ?? []);
+  const total = LORE_FRAGMENTS.length;
+  const count = LORE_FRAGMENTS.filter(f => collected.has(f.id)).length;
+  let html = `<p style="color:var(--text-dim);margin-bottom:12px">Fragments collected: <strong style="color:var(--cyan)">${count} / ${total}</strong></p>`;
+  for (const frag of LORE_FRAGMENTS) {
+    const unlocked = collected.has(frag.id);
+    if (unlocked) {
+      html += `
+        <div class="guide-item" style="border-left:3px solid var(--cyan);padding-left:10px">
+          <div class="guide-item-name cyan">${frag.title}</div>
+          <div class="guide-item-desc" style="font-style:italic;color:var(--text)">${frag.text}</div>
+        </div>`;
+    } else {
+      html += `
+        <div class="guide-item" style="border-left:3px solid var(--text-dim);padding-left:10px;opacity:0.45">
+          <div class="guide-item-name" style="color:var(--text-dim)">${frag.title}</div>
+          <div class="guide-item-desc" style="color:var(--text-dim)">??? — find this fragment to unlock its text.</div>
+        </div>`;
+    }
+  }
+  return html;
+}
+
+function _buildCollectionsSkins() {
+  const unlocked = new Set(meta?.unlocked_skins ?? ['emerald']);
+  const activeSkin = meta?.active_skin ?? 'emerald';
+  let html = '<p style="color:var(--text-dim);margin-bottom:12px">Click an unlocked skin to equip it.</p>';
+  for (const skin of SNAKE_SKINS) {
+    const isUnlocked = unlocked.has(skin.id);
+    const isActive   = skin.id === activeSkin;
+    const border     = isActive ? `3px solid ${skin.color}` : isUnlocked ? `1px solid ${skin.color}` : '1px solid var(--border)';
+    const opacity    = isUnlocked ? '1' : '0.4';
+    const cursor     = isUnlocked && !isActive ? 'pointer' : 'default';
+    html += `
+      <div class="guide-item col-skin-card" data-skin-id="${skin.id}"
+           style="border-left:${border};padding-left:10px;opacity:${opacity};cursor:${cursor}">
+        <div class="guide-item-name" style="color:${skin.color}">
+          ${ isActive ? '◉ ' : isUnlocked ? '◎ ' : '○ '}${skin.name}${ isActive ? ' <span style="font-size:0.8em;color:var(--text-dim)">(equipped)</span>' : '' }
+        </div>
+        <div class="guide-item-desc">${isUnlocked ? skin.unlockDesc : '🔒 ' + skin.unlockDesc}</div>
+      </div>`;
+  }
+  return html;
+}
+
+function _buildCollectionsStats() {
+  const m = meta ?? {};
+  const rows = [
+    ['Serpent Knowledge', m.serpent_knowledge ?? 0],
+    ['Total Runs',        m.total_runs ?? 0],
+    ['Ascensions',        m.ascension_count ?? 0],
+    ['Best Peak Length',  m.best_peak_length ?? 0],
+    ['Best Essence',      formatNumber(Math.floor(m.best_total_essence ?? 0))],
+    ['Golden Caught',     m.total_golden_caught ?? 0],
+    ['Challenges Done',   m.total_challenges_completed ?? 0],
+    ['Lore Collected',    `${(m.collected_lore_ids ?? []).length} / ${LORE_FRAGMENTS.length}`],
+    ['Skins Unlocked',    `${(m.unlocked_skins ?? ['emerald']).length} / ${SNAKE_SKINS.length}`],
+  ];
+  let html = '<table class="stat-table" style="width:100%;margin-top:4px">';
+  for (const [label, value] of rows) {
+    html += `<tr><td>${label}</td><td style="text-align:right;color:var(--cyan)">${value}</td></tr>`;
+  }
+  html += '</table>';
+  return html;
+}
+
+function _renderCollectionsTab(tab) {
+  if (!dom.collectionsContent) return;
+  _activeColTab = tab;
+  // Update tab button states
+  if (dom.collectionsModal) {
+    for (const btn of dom.collectionsModal.querySelectorAll('.guide-tab')) {
+      btn.classList.toggle('active', btn.dataset.colTab === tab);
+    }
+  }
+  let html = '';
+  if (tab === 'lore')  html = _buildCollectionsLore();
+  if (tab === 'skins') html = _buildCollectionsSkins();
+  if (tab === 'stats') html = _buildCollectionsStats();
+  dom.collectionsContent.innerHTML = html;
+  // Skin equip click handler
+  if (tab === 'skins') {
+    dom.collectionsContent.querySelectorAll('.col-skin-card[data-skin-id]').forEach(card => {
+      card.addEventListener('click', () => {
+        const sid = card.dataset.skinId;
+        if (!meta || !meta.unlocked_skins.includes(sid)) return;
+        meta.active_skin = sid;
+        saveMeta(meta);
+        _renderCollectionsTab('skins');  // refresh
+        showToast(`Skin equipped: ${sid}`, 'success');
+      });
+    });
+  }
+}
+
+function openCollections() {
+  if (!dom.collectionsModal) return;
+  _renderCollectionsTab(_activeColTab);
+  dom.collectionsModal.classList.remove('hidden');
+}
+
+function closeCollections() {
+  if (!dom.collectionsModal) return;
+  dom.collectionsModal.classList.add('hidden');
+}
 
 function openSettings() {
   if (!dom.settingsModal) return;
